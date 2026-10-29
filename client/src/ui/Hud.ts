@@ -85,6 +85,8 @@ export class Hud {
   private readonly tabs: TabButton[];
   private readonly kingBars: Phaser.GameObjects.Graphics;
   private readonly lastKingHp: Record<TeamId, number> = { 0: Infinity, 1: Infinity };
+  /** Creeps and sends still alive on each team's side, next to its king bar. */
+  private readonly alive: Phaser.GameObjects.BitmapText[];
   private readonly slots: SlotButton[];
   private readonly modeButtons: Record<SlotMode, MiniButton>;
   private readonly pageButton: MiniButton;
@@ -131,6 +133,7 @@ export class Hud {
     scene.add.bitmapText(252, 4, FONT, 'MY').setTint(myTeam === 0 ? 0x80b0ff : 0xff8080);
     scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(myTeam === 0 ? 0xff8080 : 0x80b0ff);
     this.kingBars = scene.add.graphics();
+    this.alive = [0, 1].map((row) => scene.add.bitmapText(474, 4 + row * 10, FONT, '').setOrigin(1, 0));
 
     // Bottom panels (y 186..270). Left: 4x3 command card (QWER / ASDF / YXCV) plus a column of mode buttons.
     ff6Window(scene, 2, 186, 178, 84);
@@ -565,16 +568,33 @@ export class Hud {
     this.topText.setText(`WAVE ${g.wave}/${g.data.waves.length}\n${phase}`);
     const myTeam = g.players[this.player]!.team;
     const bars = this.kingBars.clear();
+    const attackers = this.attackersAlive();
     ([myTeam, myTeam === 0 ? 1 : 0] as const).forEach((team, row) => {
       const k = g.king(team);
       // A king losing HP makes its view tab blink.
       if (k.hp < this.lastKingHp[team]) this.tabs.forEach((t, i) => this.views[i]!.kingTeam === team && t.flash());
       this.lastKingHp[team] = k.hp;
       const x = 280;
-      const y = 5 + row * 10;
-      bars.fillStyle(0x000000, 0.7).fillRect(x, y, 194, 6);
-      bars.fillStyle(team === 0 ? 0x60a0ff : 0xff6060, 1).fillRect(x + 1, y + 1, Math.ceil(192 * (k.hp / k.maxHp)), 4);
+      const y = 6 + row * 10;
+      bars.fillStyle(0x000000, 0.7).fillRect(x, y, 152, 5);
+      bars.fillStyle(team === 0 ? 0x60a0ff : 0xff6060, 1).fillRect(x + 1, y + 1, Math.ceil(150 * (k.hp / k.maxHp)), 3);
+      // Who clears the wave faster: enemies left on this team's lanes and at its king.
+      const n = attackers[team];
+      this.alive[row]!.setText(g.phase === 'build' ? '' : `${n}`).setTint(n ? 0xffffff : 0x80ff90);
     });
     this.tabs.forEach((t, i) => t.setActive(this.views[i]!.areas.includes(s.viewArea)));
+  }
+
+  /** Live creeps and sends per defending team, by the area they are in (lanes and king arenas). */
+  private attackersAlive(): Record<TeamId, number> {
+    const g = this.game;
+    const count: Record<TeamId, number> = { 0: 0, 1: 0 };
+    const arenas: Record<number, TeamId> = { [g.arenaOf(0)]: 0, [g.arenaOf(1)]: 1 };
+    for (const u of g.units.values()) {
+      if (u.dead || (u.kind !== 'creep' && u.kind !== 'merc')) continue;
+      const team = g.isLane(u.area) ? g.players[u.area]?.team : arenas[u.area];
+      if (team !== undefined) count[team]++;
+    }
+    return count;
   }
 }
