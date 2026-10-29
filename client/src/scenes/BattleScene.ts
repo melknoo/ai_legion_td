@@ -302,12 +302,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private get mode(): SlotMode {
-    return this.session.game.phase === 'fight' ? 'send' : this.slotMode;
+    return this.slotMode;
   }
 
-  /** Building is only possible between waves; sends work in both phases. */
+  /** Fighters can be browsed during a wave too; placing them waits for the build phase. */
   private setSlotMode(mode: SlotMode): void {
-    if (mode === 'build' && this.session.game.phase === 'fight') return;
     this.slotMode = mode;
     this.selectedBuild = null;
   }
@@ -321,6 +320,7 @@ export class BattleScene extends Phaser.Scene {
       this.selectedBuild = null;
       this.feedback(this.session.send({ type: 'reroll' }), 'NEW FIGHTERS!');
     } else if (i < this.fighters().length) {
+      if (this.session.game.phase !== 'build') return this.ui.floatText('BUILD AFTER WAVE', 0xff6060);
       this.selectedBuild = this.selectedBuild === i ? null : i;
       this.selectedUnit = null;
       if (this.viewArea !== this.me) this.setView(this.me);
@@ -617,8 +617,12 @@ export class BattleScene extends Phaser.Scene {
         }
         return;
       case 'phase': {
-        // Each build phase starts on the fighters again.
+        // Each build phase starts on the fighters, each wave on the sends.
         if (ev.phase === 'build') this.slotMode = 'build';
+        if (ev.phase === 'fight') {
+          this.slotMode = 'send';
+          this.selectedBuild = null;
+        }
         const prev = this.lastPhase;
         this.lastPhase = ev.phase;
         if (ev.phase === 'arena') {

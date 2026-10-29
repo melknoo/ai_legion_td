@@ -50,6 +50,8 @@ export const NetPlayer = schema(
     /** Buildable fighters (differs from the builder's for a Prophet). */
     fighters: t.array('string'),
     rerolls: t.uint8(),
+    /** Sends bought for the next wave start. */
+    queuedSends: t.array('string'),
   },
   'NetPlayer',
 );

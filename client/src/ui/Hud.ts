@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { describeAbility, rerollCost, type GameView, type KingStat, type TeamId, type UnitDef, type UnitState } from '@legion/shared';
-import { UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifest.ts';
+import { DIR, UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifest.ts';
 import { FONT } from '../scenes/BootScene.ts';
-import { ff6Window } from './ff6Window.ts';
+import { ff6Window, panelTexture } from './ff6Window.ts';
 import { RichLine, type Segment } from './RichLine.ts';
 import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
@@ -75,6 +75,9 @@ export function facesetKey(unitId: string): string {
 
 const pct = (m: number) => `${Math.round(m * 100)}%`;
 
+/** Distinct merc kinds the send queue strip can list. */
+const QUEUE_GROUPS = 10;
+
 /** Bottom command panels and top status bar, mouse and keyboard driven. */
 export class Hud {
   private hover: Hover | null = null;
@@ -103,6 +106,10 @@ export class Hud {
   private readonly farm: SlotButton;
   private readonly kingButtons: SlotButton[];
   private portraitState = '';
+  private readonly queueBox: Phaser.GameObjects.Image;
+  private readonly queueLabel: Phaser.GameObjects.BitmapText;
+  private readonly queueIcons: { img: Phaser.GameObjects.Image; hue: Phaser.Filters.ColorMatrix; count: Phaser.GameObjects.BitmapText }[];
+  private queueState = '';
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -150,6 +157,14 @@ export class Hud {
     mini(254, { text: '?' }, () => act.toggleTypeChart(), { on: 'chart' });
     this.hand = scene.add.image(0, 0, 'icon-hand').setOrigin(1, 0.5).setDepth(1);
     scene.tweens.add({ targets: this.hand, x: '-=2', duration: 300, yoyo: true, repeat: -1 });
+
+    // Send queue: what this player bought for the next wave start, just above the command card.
+    this.queueBox = ff6Window(scene, 2, 164, 60, 21).setVisible(false);
+    this.queueLabel = scene.add.bitmapText(7, 171, FONT, '').setTint(0xc0c8f0);
+    this.queueIcons = Array.from({ length: QUEUE_GROUPS }, () => {
+      const img = scene.add.image(0, 167, '__DEFAULT').setOrigin(0, 0).setVisible(false);
+      return { img, hue: img.enableFilters().filters!.internal.addColorMatrix(), count: scene.add.bitmapText(0, 175, FONT, '') };
+    });
 
     // Middle: info / tooltip.
     ff6Window(scene, 182, 186, 156, 84);
@@ -208,13 +223,14 @@ export class Hud {
     const me = g.players[this.player]!;
     this.drawTop(s);
 
-    // Slots: fighters for gold, or sends for lumber (build phase: either, wave: sends only).
+    // Slots: fighters for gold (placeable between waves, browsable during one), or sends for lumber.
     const send = s.slotMode === 'send';
     const open = g.phase === 'build' || g.phase === 'fight';
     const prophet = !!g.data.builders[me.builder]?.random;
     const sends = Object.values(g.data.mercs);
     const pages = Math.ceil(sends.length / SEND_PAGE_SIZE);
-    this.modeButtons.build.setState(g.phase === 'build', !send);
+    const build = g.phase === 'build';
+    this.modeButtons.build.setState(open, !send);
     this.modeButtons.send.setState(open, send);
     this.pageButton.setVisible(send && open && pages > 1);
     this.hand.setVisible(false);
@@ -241,8 +257,8 @@ export class Hud {
       if (i === REROLL_SLOT && prophet) {
         const left = g.data.rules.prophet.rerolls - me.rerolls;
         const cost = rerollCost(g.data, me);
-        const ok = left > 0 && me.gold >= cost && me.lumber >= cost;
-        slot.setVisible(g.phase === 'build');
+        const ok = build && left > 0 && me.gold >= cost && me.lumber >= cost;
+        slot.setVisible(open);
         slot.setContent(facesetKey(builderPortrait(g.data.builders[me.builder]!)), left > 0 ? String(cost) : 'MAX', {
           corner: SLOT_KEYS[i],
           labelColor: ok || left <= 0 ? 0xffffff : 0xff7070,
@@ -251,11 +267,11 @@ export class Hud {
         return;
       }
       const id = me.fighters[i];
-      slot.setVisible(!!id && g.phase === 'build');
+      slot.setVisible(!!id && open);
       if (!id) return;
       const d = g.data.units[id]!;
       const cost = d.goldCost ?? 0;
-      const ok = me.gold >= cost;
+      const ok = build && me.gold >= cost;
       const active = i === s.selectedBuild;
       // The badge backing hints whether this attack type suits the coming wave.
       const vs = creep ? g.data.damageTable[d.attack.type][creep.armorType] : 1;
@@ -263,7 +279,7 @@ export class Hud {
         hue: UNIT_SPRITES[id]?.hue,
         corner: SLOT_KEYS[i],
         costIcon: 'icon-coin',
-        labelColor: ok ? 0xffffff : 0xff7070,
+        labelColor: ok || !build ? 0xffffff : 0xff7070,
         badges: this.badges(d),
         badgeBg: vs > 1.001 ? 0x1c6a28 : vs < 0.999 ? 0x7a2020 : undefined,
       });
@@ -286,7 +302,41 @@ export class Hud {
       b.setContent(k.icon, `${lvl}`, { corner: k.key }).setState(me.lumber >= r.king.upgradeLumber && lvl < this.kingMax(k.stat));
     });
 
+    this.drawQueue();
     this.drawInfo(s);
+  }
+
+  /** Bought sends grouped by kind ("imp x3"), with the wave they will join. */
+  private drawQueue(): void {
+    const g = this.game;
+    const queued = g.players[this.player]!.queuedSends;
+    const joins = g.phase === 'build' ? g.wave : g.wave + 1;
+    const state = `${joins}:${queued.join()}`;
+    if (state === this.queueState) return;
+    this.queueState = state;
+    const counts = new Map<string, number>();
+    for (const id of queued) counts.set(id, (counts.get(id) ?? 0) + 1);
+    const groups = [...counts].slice(0, QUEUE_GROUPS);
+    const label = `W${joins}`;
+    this.queueLabel.setText(groups.length ? label : '');
+    let x = 7 + label.length * 8 + 4;
+    this.queueIcons.forEach((q, i) => {
+      const group = groups[i];
+      const unit = group && g.data.mercs[group[0]]?.unit;
+      const spec = unit ? UNIT_SPRITES[unit] : undefined;
+      q.img.setVisible(!!spec);
+      q.count.setVisible(!!spec);
+      if (!group || !spec) return;
+      q.img.setTexture(spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`, DIR.left).setX(x);
+      q.hue.colorMatrix.reset();
+      if (spec.hue) q.hue.colorMatrix.hue(spec.hue);
+      const n = group[1] > 1 ? String(group[1]) : '';
+      q.count.setText(n).setX(x + 14);
+      x += 16 + (n ? n.length * 8 : 0) + 2;
+    });
+    const w = x + 3;
+    this.queueBox.setVisible(groups.length > 0);
+    if (groups.length) this.queueBox.setTexture(panelTexture(this.scene, w, 21, 'window'));
   }
 
   /** Attack and armor type icons for a slot corner. */
@@ -325,11 +375,12 @@ export class Hud {
         return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `REROLLS ALL SIX\n${left}/${r.prophet.rerolls} LEFT`);
       } else {
         const id = me.fighters[h.index];
-        if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${g.data.units[id]?.goldCost}G`, 'fighter', 'CLICK, THEN PLACE\nSHIFT: PLACE MANY');
+        const how = g.phase === 'build' ? 'CLICK, THEN PLACE\nSHIFT: PLACE MANY' : 'BUILD AFTER WAVE';
+        if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${g.data.units[id]?.goldCost}G`, 'fighter', how);
       }
     }
     if (h?.on === 'mode') {
-      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR GOLD\nONLY BETWEEN WAVES');
+      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR GOLD\nPLACED BETWEEN WAVES');
       return this.showText('icon-log', 'SEND', '1/2: SWITCH', 'UNITS FOR LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
     }
     if (h?.on === 'page') {

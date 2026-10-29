@@ -211,6 +211,10 @@ export class LegionRoom extends Room<{ state: NetState }> {
         p.fighters.clear();
         for (const id of gp.fighters) p.fighters.push(id);
       }
+      if (p.queuedSends.join() !== gp.queuedSends.join()) {
+        p.queuedSends.clear();
+        for (const id of gp.queuedSends) p.queuedSends.push(id);
+      }
     });
 
     for (const u of game.units.values()) {

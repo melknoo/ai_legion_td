@@ -30,6 +30,8 @@ export interface PlayerState {
   fighters: string[];
   /** Prophet rerolls used. */
   rerolls: number;
+  /** Merc ids this player bought that wait for the next wave start. */
+  queuedSends: string[];
   gold: number;
   lumber: number;
   income: number;
@@ -164,6 +166,7 @@ export class Game implements GameView {
       ...p,
       fighters: this.data.builders[p.builder]?.random ? this.rollRoster() : [...(this.data.builders[p.builder]?.fighters ?? [])],
       rerolls: 0,
+      queuedSends: [],
       gold: r.startGold,
       lumber: r.startLumber,
       income: r.startIncome,
@@ -341,6 +344,7 @@ export class Game implements GameView {
     player.lumber -= merc.lumberCost;
     player.income += merc.incomeGain;
     this.pendingSends[player.team].push(merc.unit);
+    player.queuedSends.push(mercId);
     return { ok: true };
   }
 
@@ -425,6 +429,7 @@ export class Game implements GameView {
       for (const unit of sends) this.spawnAttacker(unit, 'merc', lanes[i++ % lanes.length]!);
       this.pendingSends[team] = [];
     }
+    for (const p of this.players) p.queuedSends = [];
   }
 
   private endFight(): void {

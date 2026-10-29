@@ -191,6 +191,18 @@ describe('sends', () => {
     expect(mercs).toHaveLength(2);
     expect(mercs.every((m) => m.area === 1 && m.team === 0)).toBe(true);
   });
+
+  it('stay listed on the buyer until they are released', () => {
+    const g = newGame(withRules({ startWorkers: 0 }));
+    g.apply({ type: 'sendMerc', player: 0, merc: 'brute' });
+    expect(g.players[0]!.queuedSends).toEqual(['brute']);
+    expect(g.players[1]!.queuedSends).toEqual([]);
+    runUntil(g, phaseIs('fight'));
+    expect(g.players[0]!.queuedSends).toEqual([]);
+    g.apply({ type: 'sendMerc', player: 0, merc: 'brute' });
+    runUntil(g, phaseIs('build'));
+    expect(g.players[0]!.queuedSends).toEqual(['brute']);
+  });
 });
 
 describe('determinism', () => {
