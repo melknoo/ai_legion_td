@@ -4,13 +4,14 @@ import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../asset
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
+import { WC3_BUILDER } from '../ui/builderList.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
 import { setTipsEnabled, tipsEnabled } from '../ui/Tutorial.ts';
 import { onKey } from '../ui/keys.ts';
 import { FONT } from './BootScene.ts';
 
-type Panel = 'main' | 'solo' | 'join' | 'name';
+type Panel = 'main' | 'solo' | 'join' | 'name' | 'builders';
 
 interface MenuItem {
   label: () => string;
@@ -111,8 +112,9 @@ export class TitleScene extends Phaser.Scene {
         { label: () => 'JOIN ONLINE GAME', action: () => this.show('join') },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
         { label: () => `TIPS: ${tipsEnabled() ? 'ON' : 'OFF'}`, action: () => setTipsEnabled(!tipsEnabled()) },
+        { label: () => 'BUILDER LIST', action: () => this.show('builders') },
       ];
-      this.window(150, 152, 180, 80);
+      this.window(150, 146, 180, 94);
     } else if (panel === 'solo') {
       this.items = [
         { label: () => `MODE      < ${MODES[this.solo.mode].name} >`, change: (s) => this.cycleMode(s), action: () => this.cycleMode(1) },
@@ -127,6 +129,10 @@ export class TitleScene extends Phaser.Scene {
         portrait: this.add.image(342, 160, '__DEFAULT').setOrigin(0, 0),
       };
       this.layer.add([this.preview.hint, this.preview.portrait]);
+    } else if (panel === 'builders') {
+      this.items = [back];
+      this.window(30, 114, 420, 148, 126);
+      this.builderTable(40, 120);
     } else {
       const join = panel === 'join';
       this.input_ = new TextInput(this, 160, 178, 160, {
@@ -157,6 +163,19 @@ export class TitleScene extends Phaser.Scene {
       });
       this.layer.add([t, zone]);
       return t;
+    });
+  }
+
+  /** Our builders next to the Legion TD Mega builder each one stands in for, in two columns. */
+  private builderTable(x: number, y: number): void {
+    this.layer.add(this.add.bitmapText(x, y, FONT, 'BUILDER   IN WC3 LEGION TD MEGA').setTint(0xc0c8f0));
+    Object.values(LEGION_DATA.builders).forEach((b, i) => {
+      const bx = x + Math.floor(i / 10) * 204;
+      const by = y + 12 + (i % 10) * 11;
+      this.layer.add([
+        this.add.bitmapText(bx, by, FONT, b.name.toUpperCase()),
+        this.add.bitmapText(bx + 80, by, FONT, WC3_BUILDER[b.id] ?? '-').setTint(0xfff080),
+      ]);
     });
   }
 

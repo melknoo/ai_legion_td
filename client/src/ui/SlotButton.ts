@@ -33,6 +33,8 @@ export class SlotButton {
   private readonly label: Phaser.GameObjects.BitmapText;
   private readonly badgeBg: Phaser.GameObjects.Rectangle;
   private readonly badges: Phaser.GameObjects.Image[];
+  /** Pulsing bright frame around the active tile. */
+  private readonly frame: Phaser.GameObjects.Rectangle;
   private readonly textures: Record<'slot' | 'slotHover' | 'slotActive', string>;
   private hovered = false;
   private enabled = true;
@@ -60,7 +62,9 @@ export class SlotButton {
     const row = o.badgeRow ? 1 : 0;
     this.badgeBg = scene.add.rectangle(o.w - 11 - row * 9, 2, 9, 9, 0x0c1240, 0.85).setOrigin(0, 0);
     this.badges = [0, 1].map((i) => scene.add.image(o.w - 10 - row * (1 - i) * 9, 3 + (1 - row) * i * 9, '__DEFAULT').setOrigin(0, 0));
-    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges]);
+    this.frame = scene.add.rectangle(1, 1, o.w - 2, o.h - 2).setOrigin(0, 0).setStrokeStyle(2, 0xfff4a0).setVisible(false);
+    scene.tweens.add({ targets: this.frame, alpha: 0.35, duration: 350, yoyo: true, repeat: -1 });
+    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges, this.frame]);
     this.bg
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => this.hover(true))
@@ -114,11 +118,13 @@ export class SlotButton {
     return this;
   }
 
-  setState(enabled: boolean, active = false): this {
+  /** `dimmed`: another tile of the card is active, so this one steps back. */
+  setState(enabled: boolean, active = false, dimmed = false): this {
     this.enabled = enabled;
     this.active = active;
-    this.icon.setAlpha(enabled ? 1 : 0.35);
-    this.badges.forEach((b) => b.setAlpha(enabled ? 1 : 0.5));
+    this.icon.setAlpha(!enabled ? 0.35 : dimmed ? 0.55 : 1);
+    this.badges.forEach((b) => b.setAlpha(enabled && !dimmed ? 1 : 0.5));
+    this.frame.setVisible(active);
     this.refresh();
     return this;
   }

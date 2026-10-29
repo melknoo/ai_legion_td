@@ -8,6 +8,7 @@ import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
 import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
+import { playerColor } from '../ui/playerColors.ts';
 import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
 
@@ -46,6 +47,8 @@ interface UnitView {
   def: string;
   /** Pulsing aura ring for aura carriers. */
   ring?: Phaser.GameObjects.Ellipse;
+  /** Ring in the owner's colour under fighters and sends. */
+  ownerRing?: Phaser.GameObjects.Ellipse;
 }
 
 /**
@@ -83,6 +86,9 @@ export class BattleScene extends Phaser.Scene {
   private arenaBg!: Phaser.GameObjects.TileSprite;
   private grid!: Phaser.GameObjects.Graphics;
   private ghost!: Phaser.GameObjects.Sprite;
+  /** Pulsing ring and bobbing arrow on the selected unit. */
+  private selRing!: Phaser.GameObjects.Ellipse;
+  private selArrow!: Phaser.GameObjects.Triangle;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
   constructor() {
@@ -116,6 +122,9 @@ export class BattleScene extends Phaser.Scene {
     this.arenaBg = this.add.tileSprite(-side, -FIELD_MARGIN, ARENA_PX.w + side * 2, ARENA_PX.h + FIELD_MARGIN * 2, 'stone').setOrigin(0, 0);
     this.grid = this.add.graphics().setDepth(1);
     this.ghost = this.add.sprite(0, 0, '__DEFAULT').setOrigin(0.5, 1).setAlpha(0.6).setVisible(false).setDepth(9000);
+    this.selRing = this.add.ellipse(0, 0, 18, 7).setStrokeStyle(1, 0xfff060).setFillStyle(0xfff060, 0.25).setVisible(false);
+    this.tweens.add({ targets: this.selRing, scaleX: 1.2, scaleY: 1.2, alpha: 0.5, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.selArrow = this.add.triangle(0, 0, 0, 0, 6, 0, 3, 4, 0xfff060).setStrokeStyle(1, 0x303048).setOrigin(0.5, 1).setVisible(false).setDepth(9998);
 
     const cam = this.cameras.main;
     cam.setViewport(0, FIELD_TOP * UI_ZOOM, CANVAS_W, FIELD_H * UI_ZOOM).setZoom(FIELD_ZOOM).setBackgroundColor('#0b0b18');
@@ -241,6 +250,7 @@ export class BattleScene extends Phaser.Scene {
     // A second press on 2 turns the send page.
     onKey(kb, 'keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
     onKey(kb, 'keydown-T', () => this.ui.toggleTypeChart());
+    onKey(kb, 'keydown-I', () => this.ui.toggleWavePreview());
     onKey(kb, 'keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
       const all = this.viewList.flatMap((v) => v.areas);
@@ -278,6 +288,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       const w = this.pointerWorld(p);
       if (!w) return; // HUD area
+      this.ui.hideSummary();
       if (this.ui.typeChartOpen) return this.ui.toggleTypeChart();
       if (p.rightButtonDown()) return this.clearSelection();
       const cell = this.cellAt(w.x, w.y);
@@ -305,6 +316,7 @@ export class BattleScene extends Phaser.Scene {
   private clearSelection(): void {
     this.selectedBuild = null;
     this.selectedUnit = null;
+    this.ui.unpinWavePreview();
   }
 
   private get mode(): SlotMode {
@@ -467,6 +479,7 @@ export class BattleScene extends Phaser.Scene {
       view.sprite.setVisible(visible);
       view.shadow.setVisible(visible && !u.dead);
       view.ring?.setVisible(visible && !u.dead);
+      view.ownerRing?.setVisible(visible && !u.dead);
       view.hp.setVisible(visible);
       if (!visible) continue;
       const pos = this.session.interpolated(u.id)!;
@@ -483,6 +496,7 @@ export class BattleScene extends Phaser.Scene {
         .setDepth(this.unitDepth(u, view, s.y));
       view.shadow.setPosition(Math.round(s.x + lunge), Math.round(s.y) + 1).setDepth(9 + s.y);
       view.ring?.setPosition(Math.round(s.x + lunge), Math.round(s.y)).setDepth(8 + s.y);
+      view.ownerRing?.setPosition(Math.round(s.x + lunge), Math.round(s.y)).setDepth(8.5 + s.y);
       this.animate(u, view, moving);
       if (this.time.now > view.flashUntil) {
         // Debuffs tint the unit: stunned grey, poisoned green, slowed blue.
@@ -491,6 +505,23 @@ export class BattleScene extends Phaser.Scene {
       }
       this.drawHpBar(u, view, s.x, s.y);
     }
+    this.drawSelection();
+  }
+
+  /** Ring at the feet and an arrow over the head of the selected unit, wherever it walks. */
+  private drawSelection(): void {
+    const u = this.selectedUnit !== null ? this.session.game.units.get(this.selectedUnit) : undefined;
+    const view = u ? this.views.get(u.id) : undefined;
+    const shown = !!u && !!view && !u.dead && u.area === this.viewArea;
+    this.selRing.setVisible(shown);
+    this.selArrow.setVisible(shown);
+    if (!shown) return;
+    const x = view.shadow.x;
+    const y = view.shadow.y - 1;
+    const w = u.kind === 'king' ? 32 : 18 * view.scale;
+    this.selRing.setPosition(x, y).setSize(w, w * 0.38).setDepth(view.shadow.depth + 0.6);
+    const head = view.sprite.getBounds().top;
+    this.selArrow.setPosition(x, Math.round(head - 2 + Math.sin(this.time.now / 150) * 1.5));
   }
 
   private createView(u: UnitState): UnitView {
@@ -502,6 +533,10 @@ export class BattleScene extends Phaser.Scene {
     if (king) sprite.play(`${KING_SPRITES[u.team]}-idle`);
     if (spec?.hue) sprite.enableFilters().filters!.internal.addColorMatrix().colorMatrix.hue(spec.hue);
     const shadow = this.add.ellipse(0, 0, king ? 28 : 12 * scale, king ? 8 : 4 * scale, 0x000000, 0.35);
+    // Fighters and sends wear their owner's colour at the feet.
+    const owned = u.kind === 'fighter' || u.kind === 'merc';
+    const color = playerColor(u.owner);
+    const ownerRing = owned ? this.add.ellipse(0, 0, 14 * scale, 5 * scale, color, 0.3).setStrokeStyle(1, color, 0.9) : undefined;
     // Aura carriers get a pulsing ring at their feet in the colour of what the aura does.
     const aura = this.session.game.def(u).abilities?.find((a) => a.kind === 'aura');
     let ring: Phaser.GameObjects.Ellipse | undefined;
@@ -511,7 +546,7 @@ export class BattleScene extends Phaser.Scene {
     }
     const hp = this.add.graphics();
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, hp, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
+    const view = { sprite, shadow, ring, ownerRing, hp, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
   }
@@ -525,6 +560,7 @@ export class BattleScene extends Phaser.Scene {
     view.sprite.destroy();
     view.shadow.destroy();
     view.ring?.destroy();
+    view.ownerRing?.destroy();
     view.hp.destroy();
     this.views.delete(id);
   }
@@ -626,8 +662,18 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'death': {
+        if (ev.area !== this.viewArea) return;
+        // Bounty for the local player's kills (mirrors the sim: fighter kills only, nothing in the finale).
+        // Killed attackers are already gone from the state; their view (and def) lives until the next sync.
+        const killer = ev.killerId !== null ? game.units.get(ev.killerId) : undefined;
+        const def = game.data.units[this.views.get(ev.unitId)?.def ?? ''];
+        const bounty = game.data.waves[game.wave - 1]?.endless ? 0 : def?.bounty ?? 0;
+        if (killer?.kind === 'fighter' && killer.owner === this.me && bounty > 0) {
+          const at = this.toField(ev.x, ev.y);
+          this.goldPop(at.x, at.y - 20, bounty);
+        }
         const u = game.units.get(ev.unitId);
-        if (!u || u.area !== this.viewArea) return;
+        if (!u) return;
         const s = this.toField(u.x, u.y);
         this.playFx('smoke', s.x, s.y - 8);
         return;
@@ -658,9 +704,14 @@ export class BattleScene extends Phaser.Scene {
           const wave = game.data.waves[ev.wave - 1]!;
           this.ui.showBanner([`WAVE ${ev.wave}`, `${wave.count}X ${game.data.units[wave.creep]!.name.toUpperCase()}`]);
         } else {
-          // Wave summary: how both sides held their lanes.
-          const leaks = game.players.map((p, i) => `${(p.index === this.me ? 'YOU' : p.name.toUpperCase()).padEnd(5)}${p.leaks - (this.leaksAtWaveStart[i] ?? 0)} LEAKS`);
-          this.ui.showBanner([`WAVE ${ev.wave - 1} CLEARED`, ...leaks], 2600);
+          // Wave summary in a corner: how every lane held, names in their player colour.
+          const width = Math.max(...game.players.map((p) => (p.index === this.me ? 3 : p.name.length)));
+          const rows = game.players.map((p, i) => {
+            const leaks = p.leaks - (this.leaksAtWaveStart[i] ?? 0);
+            const name = (p.index === this.me ? 'YOU' : p.name.toUpperCase()).padEnd(width + 1);
+            return { text: `${name}${leaks ? `${leaks} LEAKS` : 'CLEAN'}`, color: playerColor(p.index) };
+          });
+          this.ui.showSummary([{ text: `WAVE ${ev.wave - 1} CLEARED`, color: 0xfff080 }, ...rows]);
         }
         return;
       }
@@ -724,6 +775,16 @@ export class BattleScene extends Phaser.Scene {
   private fieldText(x: number, y: number, text: string, color: number): void {
     const t = this.add.bitmapText(Math.round(x), Math.round(y), FONT, text).setOrigin(0.5, 1).setTint(color).setDepth(10002);
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 700, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
+  }
+
+  /** "+N" with a coin rising from a creep the local player killed. */
+  private goldPop(x: number, y: number, amount: number): void {
+    const text = `+${amount}`;
+    const left = Math.round(x - (text.length * 8 + 8) / 2);
+    const coin = this.add.image(left, 0, 'icon-coin').setOrigin(0, 1);
+    const label = this.add.bitmapText(left + 8, 1, FONT, text).setOrigin(0, 1).setTint(0xffe040);
+    const c = this.add.container(0, Math.round(y), [coin, label]).setDepth(10003);
+    this.tweens.add({ targets: c, y: y - 12, alpha: 0, duration: 900, delay: 150, ease: 'Quad.easeOut', onComplete: () => c.destroy() });
   }
 
   /** FF6-style damage digits: pop up, bounce, then fade. */

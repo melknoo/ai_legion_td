@@ -1,5 +1,2 @@
--man muss noch sehen was man alles gesendet hat irgendwo. ALso bevor es gesendet wurde
--während der wave sollte man auf die einheiten die man bauen kann switchen können
--man muss noch sehen können, wie viele vom jeweiligen team am leben sind - kings hp balken können dafür kleiner
--bis jetzt kann man nur 5 einheiten untereinander bauen, dass könnte gut noch etwas breiter
--wenn man das erste mal das spiel spielt sollen tooltips angezeigt werden. die kann man per häkchen dann ausblenden wenn man will.
+
+--mobile version -> spiel so weit portierbar wie möglich machen -- pwa usw. Wie sinnvoll wäre das sonst irgendwie downloadbar zu machen? Wichtig ist, dass es in mobile view noch gut spielbar ist.

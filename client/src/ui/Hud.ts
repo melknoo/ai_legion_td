@@ -3,7 +3,7 @@ import { describeAbility, rerollCost, type GameView, type KingStat, type TeamId,
 import { DIR, UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifest.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window, panelTexture } from './ff6Window.ts';
-import { RichLine, type Segment } from './RichLine.ts';
+import { RichLine, richText, type Segment } from './RichLine.ts';
 import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
 import { SLOT_KEYS } from './keys.ts';
@@ -63,7 +63,8 @@ type Hover =
   | { on: 'chart' }
   | { on: 'worker' }
   | { on: 'farm' }
-  | { on: 'king'; stat: KingStat };
+  | { on: 'king'; stat: KingStat }
+  | { on: 'wave' };
 
 /** How the info panel compares a unit: a fighter against the wave, an attacker by its weak spots. */
 type Role = 'fighter' | 'attacker' | 'none';
@@ -77,6 +78,12 @@ const pct = (m: number) => `${Math.round(m * 100)}%`;
 
 /** Distinct merc kinds the send queue strip can list. */
 const QUEUE_GROUPS = 10;
+/** Lines the info panel body can hold. */
+const BODY_LINES = 4;
+/** King HP bars in the top bar; the next-wave button sits right of them. */
+const KING_BAR = { x: 280, w: 96 };
+/** Gold gains within this window pop up as one "+N" at the gold counter. */
+const GOLD_POP_MS = 300;
 
 /** Bottom command panels and top status bar, mouse and keyboard driven. */
 export class Hud {
@@ -94,13 +101,27 @@ export class Hud {
   private readonly portrait: Phaser.GameObjects.Image;
   private readonly portraitHue: Phaser.Filters.ColorMatrix;
   private readonly infoName: Phaser.GameObjects.BitmapText;
-  private readonly infoSub: Phaser.GameObjects.BitmapText;
+  private readonly infoSub: RichLine;
   private readonly stats: Phaser.GameObjects.Container;
   private readonly statIcons: Phaser.GameObjects.Image[];
   private readonly statText: Phaser.GameObjects.BitmapText[];
   private readonly types: RichLine;
   private readonly matchup: RichLine;
-  private readonly infoBody: Phaser.GameObjects.BitmapText;
+  private readonly infoBody: RichLine[];
+  private readonly waveButton: {
+    bg: Phaser.GameObjects.Image;
+    icon: Phaser.GameObjects.Image;
+    hue: Phaser.Filters.ColorMatrix;
+    text: Phaser.GameObjects.BitmapText;
+    textures: Record<'slot' | 'slotHover' | 'slotActive', string>;
+  };
+  private waveButtonState = '';
+  /** The wave preview stays in the info panel until clicked again (or a unit gets selected). */
+  private wavePinned = false;
+  private lastSelected: number | null = null;
+  private lastGold: number | null = null;
+  private goldPending = 0;
+  private goldPendingSince = 0;
   private readonly actions: SlotButton[];
   private actionTargets: ({ kind: 'upgrade'; to: string } | { kind: 'sell' })[] = [];
   private readonly res: Record<'gold' | 'lumber' | 'income' | 'food', Phaser.GameObjects.BitmapText>;
@@ -134,6 +155,30 @@ export class Hud {
     scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(myTeam === 0 ? 0xff8080 : 0x80b0ff);
     this.kingBars = scene.add.graphics();
     this.alive = [0, 1].map((row) => scene.add.bitmapText(474, 4 + row * 10, FONT, '').setOrigin(1, 0));
+    // Next wave: hover shows it in the info panel, a click (or I) pins it there.
+    const waveTextures = {
+      slot: panelTexture(scene, 52, 21, 'slot'),
+      slotHover: panelTexture(scene, 52, 21, 'slotHover'),
+      slotActive: panelTexture(scene, 52, 21, 'slotActive'),
+    };
+    const waveBg = scene.add.image(KING_BAR.x + KING_BAR.w + 4, 2, waveTextures.slot).setOrigin(0, 0);
+    const waveIcon = scene.add.image(waveBg.x + 11, 13, '__DEFAULT');
+    this.waveButton = {
+      bg: waveBg,
+      icon: waveIcon,
+      hue: waveIcon.enableFilters().filters!.internal.addColorMatrix(),
+      text: scene.add.bitmapText(waveBg.x + 21, 4, FONT, '').setLineSpacing(2),
+      textures: waveTextures,
+    };
+    const waveHover = hoverFn({ on: 'wave' });
+    waveBg
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => waveHover(true))
+      .on('pointerout', () => waveHover(false))
+      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+        e.stopPropagation();
+        this.toggleWave();
+      });
 
     // Bottom panels (y 186..270). Left: 4x3 command card (QWER / ASDF / YXCV) plus a column of mode buttons.
     ff6Window(scene, 2, 186, 178, 84);
@@ -174,7 +219,7 @@ export class Hud {
     this.portrait = scene.add.image(186, 190, '__DEFAULT').setOrigin(0, 0);
     this.portraitHue = this.portrait.enableFilters().filters!.internal.addColorMatrix();
     this.infoName = scene.add.bitmapText(228, 190, FONT, '');
-    this.infoSub = scene.add.bitmapText(228, 199, FONT, '').setTint(0xc0c8f0);
+    this.infoSub = new RichLine(scene, 228, 199);
     // HP, damage (attack type icon), armor (armor type icon), range.
     this.statIcons = ['icon-heart', 'icon-sword', 'icon-shield', 'icon-range'].map((key, i) =>
       scene.add.image(228 + (i % 2) * 52, 209 + Math.floor(i / 2) * 10, key).setOrigin(0, 0),
@@ -183,7 +228,7 @@ export class Hud {
     this.stats = scene.add.container(0, 0, [...this.statIcons, ...this.statText]);
     this.types = new RichLine(scene, 187, 230);
     this.matchup = new RichLine(scene, 187, 240);
-    this.infoBody = scene.add.bitmapText(187, 250, FONT, '').setLineSpacing(1);
+    this.infoBody = Array.from({ length: BODY_LINES }, (_, i) => new RichLine(scene, 187, 250 + i * 9));
     this.actions = Array.from({ length: 3 }, (_, i) =>
       new SlotButton(scene, {
         x: 186 + i * 50,
@@ -199,11 +244,12 @@ export class Hud {
     ff6Window(scene, 340, 186, 138, 84);
     scene.add.image(346, 191, 'icon-coin').setOrigin(0, 0);
     scene.add.image(408, 191, 'icon-log').setOrigin(0, 0);
+    scene.add.image(408, 202, 'icon-food').setOrigin(0, 0);
     this.res = {
       gold: scene.add.bitmapText(356, 190, FONT, ''),
       lumber: scene.add.bitmapText(418, 190, FONT, ''),
       income: scene.add.bitmapText(346, 201, FONT, ''),
-      food: scene.add.bitmapText(408, 201, FONT, ''),
+      food: scene.add.bitmapText(418, 201, FONT, ''),
     };
     this.worker = new SlotButton(scene, { x: 343, y: 225, w: 26, h: 40, onClick: () => act.buyWorker(), onHover: hoverFn({ on: 'worker' }) });
     this.farm = new SlotButton(scene, { x: 370, y: 225, w: 26, h: 40, onClick: () => act.upgradeFarm(), onHover: hoverFn({ on: 'farm' }) });
@@ -219,6 +265,15 @@ export class Hud {
         }),
     );
     scene.add.bitmapText(421, 214, FONT, 'KING').setTint(0xc0c8f0);
+  }
+
+  /** Pin or unpin the next-wave preview in the info panel. */
+  toggleWave(): void {
+    this.wavePinned = !this.wavePinned;
+  }
+
+  unpinWave(): void {
+    this.wavePinned = false;
   }
 
   update(s: HudState): void {
@@ -264,6 +319,7 @@ export class Hud {
         slot.setVisible(open);
         slot.setContent(facesetKey(builderPortrait(g.data.builders[me.builder]!)), left > 0 ? String(cost) : 'MAX', {
           corner: SLOT_KEYS[i],
+          costIcon: left > 0 ? 'icon-coin' : undefined,
           labelColor: ok || left <= 0 ? 0xffffff : 0xff7070,
         });
         slot.setState(ok);
@@ -286,7 +342,7 @@ export class Hud {
         badges: this.badges(d),
         badgeBg: vs > 1.001 ? 0x1c6a28 : vs < 0.999 ? 0x7a2020 : undefined,
       });
-      slot.setState(ok, active);
+      slot.setState(ok, active, s.selectedBuild !== null && !active);
       if (active) this.hand.setVisible(true).setPosition(slot.root.x + 2, slot.root.y + 13);
     });
 
@@ -294,7 +350,8 @@ export class Hud {
     this.res.gold.setText(String(me.gold));
     this.res.lumber.setText(String(me.lumber));
     this.res.income.setText(`INC+${me.income}`);
-    this.res.food.setText(`F:${g.foodUsed(this.player)}/${me.foodCap}`);
+    this.res.food.setText(`${g.foodUsed(this.player)}/${me.foodCap}`);
+    this.popGold(me.gold);
     const r = g.data.rules;
     this.worker.setContent('btn-worker', `${me.workers}`, { corner: 'B' }).setState(me.gold >= r.workerCost && me.workers < r.maxWorkers);
     const farm = r.farms[me.farmLevel];
@@ -358,11 +415,15 @@ export class Hud {
     const me = g.players[this.player]!;
     const r = g.data.rules;
     const h = this.hover;
+    if (s.selectedUnit !== this.lastSelected) {
+      this.lastSelected = s.selectedUnit;
+      if (s.selectedUnit !== null) this.wavePinned = false;
+    }
     const selected = s.selectedUnit !== null ? g.units.get(s.selectedUnit) : undefined;
     const ownFighter = selected?.kind === 'fighter' && selected.owner === this.player ? selected : undefined;
     // Hovering the selected unit itself must not hide its upgrade/sell buttons.
     const hoveredOther = s.hoverUnit !== null && s.hoverUnit !== s.selectedUnit;
-    const showActions = !!ownFighter && g.phase === 'build' && (!h || h.on === 'action') && !hoveredOther;
+    const showActions = !!ownFighter && g.phase === 'build' && (!h || h.on === 'action') && !hoveredOther && !this.wavePinned;
     this.updateActions(showActions ? ownFighter : undefined);
 
     if (h?.on === 'slot') {
@@ -370,21 +431,21 @@ export class Hud {
         const merc = Object.values(g.data.mercs)[s.sendPage * SEND_PAGE_SIZE + h.index];
         // Build-phase sends join the coming wave, sends during a wave the one after.
         const joins = g.phase === 'build' ? g.wave : g.wave + 1;
-        if (merc) return this.showUnit(merc.unit, `SEND ${merc.lumberCost}L`, 'attacker', `+${merc.incomeGain} INCOME\nJOINS WAVE ${joins}`);
+        if (merc) return this.showUnit(merc.unit, `SEND {log}${merc.lumberCost}`, 'attacker', `+${merc.incomeGain} INCOME\nJOINS WAVE ${joins}`);
       } else if (h.index === REROLL_SLOT && g.data.builders[me.builder]?.random) {
         const left = r.prophet.rerolls - me.rerolls;
         const cost = rerollCost(g.data, me);
-        const price = left > 0 ? `${cost}G ${cost}L` : 'NONE LEFT';
+        const price = left > 0 ? `{coin}${cost} {log}${cost}` : 'NONE LEFT';
         return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `REROLLS ALL SIX\n${left}/${r.prophet.rerolls} LEFT`);
       } else {
         const id = me.fighters[h.index];
         const how = g.phase === 'build' ? '' : 'BUILD AFTER WAVE';
-        if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${g.data.units[id]?.goldCost}G`, 'fighter', how);
+        if (id) return this.showUnit(id, `TIER ${h.index + 1}  {coin}${g.data.units[id]?.goldCost}`, 'fighter', how);
       }
     }
     if (h?.on === 'mode') {
-      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR GOLD\nPLACED BETWEEN WAVES');
-      return this.showText('icon-log', 'SEND', '1/2: SWITCH', 'UNITS FOR LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
+      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR {coin}GOLD\nPLACED BETWEEN WAVES');
+      return this.showText('icon-log', 'SEND', '1/2: SWITCH', 'UNITS FOR {log}LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
     }
     if (h?.on === 'page') {
       const pages = Math.ceil(Object.keys(g.data.mercs).length / SEND_PAGE_SIZE);
@@ -394,33 +455,47 @@ export class Hud {
       return this.showText(ARMOR_ICON, 'DAMAGE TYPES', 'T: OPEN CHART', 'ATTACK TYPE VS\nARMOR TYPE DECIDES\nHOW HARD A HIT IS');
     }
     if (h?.on === 'worker') {
-      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `${r.workerCost}G`, `GATHERS ${r.lumberPerWorker} LUMBER\nEVERY ${r.lumberIntervalMs / 1000}S`);
+      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `{coin}${r.workerCost}`, `GATHERS {log}${r.lumberPerWorker} LUMBER\nEVERY ${r.lumberIntervalMs / 1000}S`);
     }
     if (h?.on === 'farm') {
       const farm = r.farms[me.farmLevel];
-      const food = `FOOD ${g.foodUsed(this.player)}/${me.foodCap}`;
+      const food = `SUPPLY {food}${g.foodUsed(this.player)}/${me.foodCap}`;
       if (!farm) return this.showText('btn-farm', 'FARM', 'MAXED', food);
-      return this.showText('btn-farm', 'FARM', `LV ${me.farmLevel}/${r.farms.length} ${farm.gold}G ${farm.lumber}L`, `+${farm.food} FOOD\n${food}`);
+      return this.showText('btn-farm', 'FARM', `{coin}${farm.gold} {log}${farm.lumber}`, `LV ${me.farmLevel}/${r.farms.length}\n+{food}${farm.food} SUPPLY\n${food}`);
     }
     if (h?.on === 'king') {
       const k = KING_BUTTONS.find((b) => b.stat === h.stat)!;
       const lvl = g.kingLevels[me.team][h.stat];
       const gain = h.stat === 'hp' ? `+${r.king.hpBase + r.king.hpStep * (lvl + 1)} MAX HP` : h.stat === 'attack' ? `+${r.king.attackStep} DAMAGE` : `+${r.king.regenStep} HP/SEC`;
-      return this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(h.stat)}  ${r.king.upgradeLumber}L`, `${gain}\n+${r.king.upgradeIncome} INCOME`);
+      return this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(h.stat)}  {log}${r.king.upgradeLumber}`, `${gain}\n+${r.king.upgradeIncome} INCOME`);
     }
     if (h?.on === 'action' && selected) {
       const t = this.actionTargets[h.index];
-      if (t?.kind === 'upgrade') return this.showUnit(t.to, `UPGRADE ${g.data.units[t.to]?.goldCost}G`, 'fighter', '');
+      if (t?.kind === 'upgrade') return this.showUnit(t.to, `UPGRADE {coin}${g.data.units[t.to]?.goldCost}`, 'fighter', '');
     }
+    if (h?.on === 'wave' || this.wavePinned) return this.showWave(this.nextWave(), true);
     const hovered = hoveredOther ? g.units.get(s.hoverUnit!) : undefined;
     const live = hovered ?? selected;
     if (live) return this.showLive(live);
     // Idle: preview the wave that is coming (or running).
-    const wave = g.data.waves[g.wave - 1];
-    if (!wave) return this.showText('icon-hand', 'COMMANDS', '', 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT');
+    if (!g.data.waves[g.wave - 1]) return this.showText('icon-hand', 'COMMANDS', '', 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT');
+    this.showWave(g.wave, false);
+  }
+
+  /** The wave still to come: the current one between waves, the following one while fighting. */
+  private nextWave(): number {
+    return this.game.phase === 'build' ? this.game.wave : this.game.wave + 1;
+  }
+
+  /** Creep, count and bounty of wave `n`; `numbered` labels it "W12" instead of NEXT/NOW. */
+  private showWave(n: number, numbered: boolean): void {
+    const g = this.game;
+    const wave = g.data.waves[n - 1];
+    if (!wave) return this.showText('icon-hand', 'LAST WAVE', '', 'NO MORE WAVES\nAFTER THIS ONE');
     const creep = g.data.units[wave.creep]!;
-    const label = g.phase === 'build' ? 'NEXT' : 'NOW';
-    this.showUnit(wave.creep, `${label} ${wave.count}X ${Math.round(creep.hp * r.creepHpMultiplier)}HP`, 'attacker', wave.endless ? 'ENDLESS FINALE!' : creep.boss ? `BOSS! BOUNTY ${creep.bounty}` : `BOUNTY ${creep.bounty} GOLD`);
+    const label = numbered ? `W${n}` : g.phase === 'build' ? 'NEXT' : 'NOW';
+    const bounty = wave.endless ? 'ENDLESS FINALE!' : creep.boss ? `BOSS! BOUNTY {coin}${creep.bounty}` : `BOUNTY {coin}${creep.bounty}`;
+    this.showUnit(wave.creep, `${label} ${wave.count}X ${Math.round(creep.hp * g.data.rules.creepHpMultiplier)}HP`, 'attacker', bounty);
   }
 
   private showLive(u: UnitState): void {
@@ -429,7 +504,7 @@ export class Hud {
     const role =
       u.kind === 'king' ? 'KING' : u.kind === 'merc' ? 'SEND' : u.kind === 'creep' ? 'CREEP' : u.owner === this.player ? 'YOURS' : owner?.name.toUpperCase() ?? '';
     const refund = u.fresh ? u.invested : Math.floor(u.invested * g.data.rules.sellRefund);
-    const note = u.leaked ? 'LEAKED!' : u.kind === 'fighter' && u.owner === this.player && g.phase !== 'build' ? `SELL ${refund}G LATER` : '';
+    const note = u.leaked ? 'LEAKED!' : u.kind === 'fighter' && u.owner === this.player && g.phase !== 'build' ? `SELL {coin}${refund} LATER` : '';
     const compare: Role = u.kind === 'fighter' ? 'fighter' : u.kind === 'king' ? 'none' : 'attacker';
     this.showUnit(u.def, `${role} ${Math.ceil(u.hp)}/${u.maxHp}`, compare, note, u);
   }
@@ -439,7 +514,7 @@ export class Hud {
     const king = live?.kind === 'king';
     this.setPortrait(king ? 'btn-hp' : facesetKey(id), king ? 0 : UNIT_SPRITES[id]?.hue ?? 0);
     this.infoName.setText(d.name.toUpperCase());
-    this.infoSub.setText(sub);
+    this.infoSub.set(richText(sub, 0xc0c8f0));
     this.stats.setVisible(true);
     this.setStats(d, live);
     const atk = ATTACK_INFO[d.attack.type];
@@ -453,7 +528,7 @@ export class Hud {
     this.matchup.set(this.compare(d, role));
     const abilities = [...(d.abilities ?? []), ...(live?.granted ?? [])].map(describeAbility);
     const lines = [...abilities, ...body.split('\n')].filter(Boolean);
-    this.infoBody.setY(250).setText(lines.slice(0, 2).join('\n'));
+    this.setBody(250, lines.slice(0, 2));
   }
 
   /**
@@ -489,12 +564,19 @@ export class Hud {
   private showText(icon: string, name: string, sub: string, body: string): void {
     this.setPortrait(icon, 0);
     this.infoName.setText(name);
-    this.infoSub.setText(sub);
+    this.infoSub.set(richText(sub, 0xc0c8f0));
     this.stats.setVisible(false);
     this.types.set([]);
     this.matchup.set([]);
     // Without stats the text can start right under the portrait.
-    this.infoBody.setY(230).setText(body);
+    this.setBody(230, body.split('\n'));
+  }
+
+  private setBody(y: number, lines: string[]): void {
+    this.infoBody.forEach((line, i) => {
+      line.root.setY(y + i * 9);
+      line.set(richText(lines[i] ?? ''));
+    });
   }
 
   /** Definition stats, or a live unit's actual max HP and bonuses; damage and armor in their type colours. */
@@ -543,7 +625,7 @@ export class Hud {
       }
     });
     // Leave room for the action buttons below the stats.
-    this.infoBody.setVisible(!unit);
+    this.infoBody.forEach((line) => line.setVisible(!unit));
     this.types.setVisible(!unit);
     this.matchup.setVisible(!unit);
   }
@@ -574,15 +656,49 @@ export class Hud {
       // A king losing HP makes its view tab blink.
       if (k.hp < this.lastKingHp[team]) this.tabs.forEach((t, i) => this.views[i]!.kingTeam === team && t.flash());
       this.lastKingHp[team] = k.hp;
-      const x = 280;
+      const { x, w } = KING_BAR;
       const y = 6 + row * 10;
-      bars.fillStyle(0x000000, 0.7).fillRect(x, y, 152, 5);
-      bars.fillStyle(team === 0 ? 0x60a0ff : 0xff6060, 1).fillRect(x + 1, y + 1, Math.ceil(150 * (k.hp / k.maxHp)), 3);
+      bars.fillStyle(0x000000, 0.7).fillRect(x, y, w, 5);
+      bars.fillStyle(team === 0 ? 0x60a0ff : 0xff6060, 1).fillRect(x + 1, y + 1, Math.ceil((w - 2) * (k.hp / k.maxHp)), 3);
       // Who clears the wave faster: enemies left on this team's lanes and at its king.
       const n = attackers[team];
       this.alive[row]!.setText(g.phase === 'build' ? '' : `${n}`).setTint(n ? 0xffffff : 0x80ff90);
     });
     this.tabs.forEach((t, i) => t.setActive(this.views[i]!.areas.includes(s.viewArea)));
+    this.drawWaveButton();
+  }
+
+  /** Creep of the next wave with its number and count. */
+  private drawWaveButton(): void {
+    const g = this.game;
+    const n = this.nextWave();
+    const wave = g.data.waves[n - 1];
+    const b = this.waveButton;
+    b.bg.setTexture(this.wavePinned ? b.textures.slotActive : this.hover?.on === 'wave' ? b.textures.slotHover : b.textures.slot);
+    const state = `${n}`;
+    if (state === this.waveButtonState) return;
+    this.waveButtonState = state;
+    const spec = wave ? UNIT_SPRITES[wave.creep] : undefined;
+    b.icon.setVisible(!!spec);
+    if (spec) b.icon.setTexture(spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`, DIR.left);
+    b.hue.colorMatrix.reset();
+    if (spec?.hue) b.hue.colorMatrix.hue(spec.hue);
+    b.text.setText(wave ? `W${n}\n${wave.count}X` : 'END');
+  }
+
+  /** Every gold gain (bounty, income, bonus, refund) rises as "+N" next to the gold counter. */
+  private popGold(gold: number): void {
+    const now = this.scene.time.now;
+    if (this.lastGold !== null && gold > this.lastGold) {
+      if (!this.goldPending) this.goldPendingSince = now;
+      this.goldPending += gold - this.lastGold;
+    }
+    this.lastGold = gold;
+    if (!this.goldPending || now - this.goldPendingSince < GOLD_POP_MS) return;
+    const x = 356 + String(gold).length * 8 + 4;
+    const t = this.scene.add.bitmapText(x, 190, FONT, `+${this.goldPending}`).setTint(0xffe040).setDepth(10);
+    this.scene.tweens.add({ targets: t, y: 182, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
+    this.goldPending = 0;
   }
 
   /** Live creeps and sends per defending team, by the area they are in (lanes and king arenas). */

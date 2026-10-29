@@ -24,6 +24,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - Sprite texture keys must go through `spriteKey()`: the pack has characters and monsters with the same folder name (e.g. Spirit).
 - Phaser 4's glow filter renders black boxes on small sprites – don't use it.
 - Phaser re-dispatches queued key events; keyboard input is deduped in `client/src/ui/keys.ts`.
+- Killed creeps and sends are removed from the state before their `death` event is handled; read their `def` from the unit view (it lives until the next `syncUnits`), position from the event.
 - No pushback: enemies cannot shove a unit that is fighting (`engaged` set in `game.ts`). A test guards this.
 - Bosses (waves 10/20/30) take stuns/slows at `BOSS_CC_FACTOR` 0.25.
 - Hosting: the owner's home laptop behind a Cloudflare Tunnel (https://legion.schleiweb.de, `deploy/home/compose.yml`, `Dockerfile`); deploy with `npm run deploy` (`scripts/deploy-home.sh`), details in `docs/hosting.md`. Fly.io was dropped to save cost. The server serves `client/dist` when `CLIENT_DIR` is set, and the client connects to its own origin in production builds. One instance only: rooms are in memory. The image runs as `USER node` on a read-only root, so the server must not write outside `/tmp` and the `/data` volume (game history). Monitoring (`/health`, `/stats`, `/client-error`, JSON logs) lives in `server/src/monitor.ts`, see `docs/hosting.md`.

@@ -32,6 +32,7 @@ Controls (everything also works with the mouse via the HUD):
 - `1` / `2` or the coin/log buttons: fighters (gold) or sends (lumber); `2` again (or `N`) turns the send page. Sends work in the build phase too, a running wave shows sends only
 - Prophet (or the All Prophet mode): one random fighter per tier; `V` rerolls them (7 times, rising gold and lumber cost)
 - `T` or the `?` button: attack-vs-armor damage chart. Slot corners show attack type (icon) and armor (shield) in their type colours; a green/red backing means strong/weak against the coming wave
+- `I` or the wave button in the top bar (next to the king bars): pin the next wave's preview in the info panel; click again, `Esc` or selecting a unit unpins it
 - click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); `U` upgrade, `Del` sell
 - `Esc` / right click: cancel placement and selection
 - `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen

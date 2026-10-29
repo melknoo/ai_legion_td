@@ -19,6 +19,11 @@ const PATTERNS: Record<string, { rows: string[]; palette: Record<string, string>
     rows: ['.......', '.......', '.w...w.', 'wwwwwww', '.w...w.', '.......', '.......'],
     palette: { w: '#e8eef8' },
   },
+  // Supply (food): a drumstick.
+  'icon-food': {
+    rows: ['..bbb..', '.bmmmb.', '.bmlmb.', '.bmmmb.', '..bmb..', '...w...', '..w.w..'],
+    palette: { b: '#6a2c18', m: '#c8683a', l: '#f0a070', w: '#f0ead8' },
+  },
   // Damage and armor type icons, drawn light so they can be tinted per type.
   'type-normal': {
     rows: ['......w', '.....w.', '....w..', '.w.w...', '..w....', '.w.w...', 'w......'],

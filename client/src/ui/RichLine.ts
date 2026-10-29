@@ -4,6 +4,17 @@ import { FONT } from '../scenes/BootScene.ts';
 /** Coloured text or a tinted icon, followed by `gap` pixels. */
 export type Segment = { text: string; color?: number; gap?: number } | { icon: string; tint?: number; gap?: number };
 
+/** Inline currency tokens for HUD texts: "TIER 1 {coin}25". */
+const TOKEN_ICONS: Record<string, string> = { coin: 'icon-coin', log: 'icon-log', food: 'icon-food' };
+
+/** Text with {coin}/{log}/{food} tokens as segments, icons sitting tight against their numbers. */
+export function richText(text: string, color?: number): Segment[] {
+  return text
+    .split(/\{(coin|log|food)\}/)
+    .map((part, i): Segment | null => (i % 2 ? { icon: TOKEN_ICONS[part]!, gap: 1 } : part ? { text: part, color, gap: 0 } : null))
+    .filter((s): s is Segment => s !== null);
+}
+
 /** One line of mixed coloured text and tinted icons, laid out left to right. */
 export class RichLine {
   readonly root: Phaser.GameObjects.Container;

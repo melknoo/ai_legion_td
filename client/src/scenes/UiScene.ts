@@ -26,6 +26,7 @@ export class UiScene extends Phaser.Scene {
   private link!: UiLink;
   private fieldLabel!: Phaser.GameObjects.BitmapText;
   private message: Phaser.GameObjects.Container | null = null;
+  private summary: Phaser.GameObjects.Container | null = null;
   private chart: Phaser.GameObjects.Container | null = null;
 
   constructor() {
@@ -62,6 +63,35 @@ export class UiScene extends Phaser.Scene {
     this.message = c;
     this.tweens.add({ targets: c, scaleY: 1, duration: 120, ease: 'Back.easeOut' });
     if (holdMs) this.tweens.add({ targets: c, alpha: 0, delay: holdMs, duration: 300, onComplete: () => c.destroy() });
+  }
+
+  /** Wave result in a small window left of the build grid (under the field label), so the grid stays free. */
+  showSummary(lines: { text: string; color?: number }[], holdMs = 4000): void {
+    this.hideSummary();
+    const w = Math.max(...lines.map((l) => l.text.length)) * 8 + 14;
+    const h = lines.length * 10 + 9;
+    const box = ff6Window(this, 0, 0, w, h);
+    const texts = lines.map((l, i) => this.add.bitmapText(7, 5 + i * 10, FONT, l.text).setTint(l.color ?? 0xffffff));
+    const c = this.add.container(4, FIELD_TOP + 14, [box, ...texts]).setDepth(19500).setAlpha(0);
+    this.summary = c;
+    this.tweens.add({ targets: c, alpha: 1, duration: 150 });
+    this.tweens.add({ targets: c, alpha: 0, delay: holdMs, duration: 400, onComplete: () => this.hideSummary() });
+  }
+
+  hideSummary(): void {
+    if (this.summary) {
+      this.tweens.killTweensOf(this.summary);
+      this.summary.destroy();
+    }
+    this.summary = null;
+  }
+
+  toggleWavePreview(): void {
+    this.hud.toggleWave();
+  }
+
+  unpinWavePreview(): void {
+    this.hud.unpinWave();
   }
 
   /** Short feedback line rising over the battlefield. */
