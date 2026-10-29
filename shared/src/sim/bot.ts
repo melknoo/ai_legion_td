@@ -61,7 +61,9 @@ export function botCommands(game: Game, player: number): Command[] {
 
 const MELEE = 150;
 /** Middle rows first, so the line holds where the creeps walk. */
-const ROWS = [2, 1, 3, 0, 4];
+const ROWS = Array.from({ length: LANE.gridRows }, (_, i) => i).sort(
+  (a, b) => Math.abs(a - (LANE.gridRows - 1) / 2) - Math.abs(b - (LANE.gridRows - 1) / 2),
+);
 
 /** Melee fighters hold the front columns, ranged ones stand behind them. */
 function freeCell(own: { cell?: { col: number; row: number } | null }[], ranged: boolean): { col: number; row: number } | null {
