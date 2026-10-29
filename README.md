@@ -38,7 +38,7 @@ Controls (everything also works with the mouse via the HUD):
 - `TAB` / view tabs: my lane, my king, foe lane, foe king; `R` restart after game over
 - The battlefield camera follows the fighting; pan with `←/→` or the mouse wheel. Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 3x
 
-## Hosting (Fly.io)
+## Hosting
 
 The server can serve the built client itself (`CLIENT_DIR`), so one process on one port runs page and game:
 
@@ -47,16 +47,9 @@ npm run build -w @legion/client
 cd server && CLIENT_DIR=../client/dist PORT=8080 npx tsx src/index.ts   # http://localhost:8080
 ```
 
-`Dockerfile` and `fly.toml` deploy exactly that. Rooms live in memory, so run a single machine:
+The `Dockerfile` builds exactly that. Rooms live in memory, so run a single instance.
 
-```sh
-fly launch --no-deploy --copy-config   # first time only: creates the app (rename it in fly.toml if the name is taken)
-fly deploy --ha=false
-```
-
-The machine stops when nobody is connected and starts again on the next visit (a few seconds' wait).
-
-## Hosting at home (Cloudflare Tunnel)
+### At home (Cloudflare Tunnel)
 
 Any always-on Linux box with Docker works, even behind CGNAT (Starlink): `cloudflared` only dials out, so no router port is opened and the home IP stays hidden.
 
@@ -69,7 +62,7 @@ cp deploy/home/.env.example deploy/home/.env   # paste TUNNEL_TOKEN
 docker compose -f deploy/home/compose.yml up -d --build
 ```
 
-Updates: `git pull` and the same `up -d --build` (running games end, rooms live in memory). The game container runs as non-root on a read-only filesystem without capabilities and is only bound to `127.0.0.1`. Keep the host firewall closed to incoming traffic (e.g. `ufw default deny incoming`, SSH only over Tailscale).
+Updates: `git pull` and the same `up -d --build` (running games end, rooms live in memory), or `npm run deploy` from a dev machine with the SSH alias from `docs/hosting.md`. The game container runs as non-root on a read-only filesystem without capabilities and is only bound to `127.0.0.1`. Keep the host firewall closed to incoming traffic (e.g. `ufw default deny incoming`, SSH only over Tailscale).
 
 ## Credits
 
