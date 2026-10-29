@@ -27,18 +27,29 @@ export function serveClient(root: string) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const url = decodeURIComponent((req.url ?? '/').split('?')[0]!);
     let file = path.join(dir, url);
-    if (!file.startsWith(dir)) return next();
+    // With the separator, a sibling like `../dist-old` cannot pass as inside `dist`.
+    if (file !== dir && !file.startsWith(dir + path.sep)) return next();
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       // Matchmaking and other API routes have no extension-less file behind them either.
       if (url.startsWith('/matchmake') || path.extname(url)) return next();
       file = path.join(dir, 'index.html');
     }
-    // Vite fingerprints assets, so those can be cached for good; the page itself must stay fresh.
+    // Vite fingerprints its bundles, so those can be cached for good; the page itself must stay
+    // fresh. The ~1900 sprite PNGs are not fingerprinted: a day at the CDN, an hour in the browser,
+    // else every visit pulls them all through the home uplink again.
+    const ext = path.extname(file);
     const immutable = url.startsWith('/assets/') && /-[\w-]{8,}\./.test(url);
-    res.writeHead(200, {
-      'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream',
-      'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    });
+    const cache = immutable
+      ? 'public, max-age=31536000, immutable'
+      : ext === '.html'
+        ? 'no-cache'
+        : 'public, max-age=3600, s-maxage=86400';
+    const modified = fs.statSync(file).mtime;
+    modified.setMilliseconds(0);
+    const since = Date.parse(req.headers['if-modified-since'] ?? '');
+    const headers = { 'Cache-Control': cache, 'Last-Modified': modified.toUTCString() };
+    if (since >= modified.getTime()) return void res.writeHead(304, headers).end();
+    res.writeHead(200, { ...headers, 'Content-Type': TYPES[ext] ?? 'application/octet-stream' });
     if (req.method === 'HEAD') return void res.end();
     fs.createReadStream(file).pipe(res);
   };

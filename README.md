@@ -56,6 +56,21 @@ fly deploy --ha=false
 
 The machine stops when nobody is connected and starts again on the next visit (a few seconds' wait).
 
+## Hosting at home (Cloudflare Tunnel)
+
+Any always-on Linux box with Docker works, even behind CGNAT (Starlink): `cloudflared` only dials out, so no router port is opened and the home IP stays hidden.
+
+1. Cloudflare Zero Trust → Networks → Tunnels → create a `cloudflared` tunnel, copy its token, and add a public hostname (e.g. `legion.example.com`) → service `http://legion:8080`.
+2. On the box:
+
+```sh
+git clone <repo> && cd ai_legion_td
+cp deploy/home/.env.example deploy/home/.env   # paste TUNNEL_TOKEN
+docker compose -f deploy/home/compose.yml up -d --build
+```
+
+Updates: `git pull` and the same `up -d --build` (running games end, rooms live in memory). The game container runs as non-root on a read-only filesystem without capabilities and is only bound to `127.0.0.1`. Keep the host firewall closed to incoming traffic (e.g. `ufw default deny incoming`, SSH only over Tailscale).
+
 ## Credits
 
 Graphics: [Ninja Adventure Asset Pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack) by Pixel-boy & AAA (CC0).

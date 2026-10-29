@@ -27,6 +27,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - No pushback: enemies cannot shove a unit that is fighting (`engaged` set in `game.ts`). A test guards this.
 - Bosses (waves 10/20/30) take stuns/slows at `BOSS_CC_FACTOR` 0.25.
 - Hosting: Fly.io via `Dockerfile` + `fly.toml`; the server serves `client/dist` when `CLIENT_DIR` is set, and the client connects to its own origin in production builds. Keep one machine (`fly deploy --ha=false`): rooms are in memory.
+- Live hosting is **not** Fly but the owner's home laptop behind a Cloudflare Tunnel (https://legion.schleiweb.de, `deploy/home/compose.yml`). Setup, access and the deploy command: `docs/hosting.md`. The image runs as `USER node` on a read-only root, so the server must not write outside `/tmp`.
 - Browser testing: a background/occluded Chrome window throttles `requestAnimationFrame`; use `?timeout&fast`.
 
 ## Verify

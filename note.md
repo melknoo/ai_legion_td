@@ -1,0 +1,4 @@
+-man muss noch sehen was man alles gesendet hat irgendwo. ALso bevor es gesendet wurde
+-während der wave sollte man auf die einheiten die man bauen kann switchen können
+-man muss noch sehen können, wie viele vom jeweiligen team am leben sind - kings hp balken können dafür kleiner
+-bis jetzt kann man nur 5 einheiten untereinander bauen, dass könnte gut noch etwas breiter

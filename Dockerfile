@@ -17,4 +17,6 @@ RUN npm run build -w @legion/client
 ENV NODE_ENV=production PORT=8080 CLIENT_DIR=/app/client/dist
 EXPOSE 8080
 WORKDIR /app/server
+# No root at runtime: the game only reads its files (tsx keeps its cache in /tmp).
+USER node
 CMD ["npx", "tsx", "src/index.ts"]
