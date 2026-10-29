@@ -1,5 +1,8 @@
 import type Phaser from 'phaser';
 
+/** Command card hotkeys, row by row (WC3 grid on a German keyboard). */
+export const SLOT_KEYS = ['Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Y', 'X', 'C', 'V'] as const;
+
 /**
  * Phaser re-dispatches its whole per-frame key queue on every new DOM key event, so keys
  * pressed within one frame would fire earlier handlers again. Act on each event only once.

@@ -6,11 +6,9 @@ import { LobbyScene } from './scenes/LobbyScene.ts';
 import { TitleScene } from './scenes/TitleScene.ts';
 import { UiScene } from './scenes/UiScene.ts';
 
-// Integer zoom keeps every pixel square; only windows smaller than the canvas scale down.
-const zoomFor = () => {
-  const fit = Math.min(window.innerWidth / CANVAS_W, window.innerHeight / CANVAS_H);
-  return fit >= 1 ? Math.floor(fit) : fit;
-};
+// Fill the window at the canvas aspect ratio; `image-rendering: pixelated` keeps the pixel art sharp
+// at fractional zooms (some pixels end up one screen pixel wider, which is hard to notice).
+const zoomFor = () => Math.min(window.innerWidth / CANVAS_W, window.innerHeight / CANVAS_H);
 
 // Dev aid: `?timeout` drives the loop with setTimeout, which keeps running in occluded windows
 // where browsers throttle requestAnimationFrame (e.g. automated browser testing).

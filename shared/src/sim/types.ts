@@ -50,6 +50,8 @@ export interface BuilderDef {
   name: string;
   /** Base fighters (T1..T6) this builder can place. */
   fighters: string[];
+  /** Prophet: rolls each player one fighter per tier from all other builders instead. */
+  random?: boolean;
 }
 
 export interface WaveDef {
@@ -123,6 +125,8 @@ export interface Rules {
   /** Arena winners get wave × this gold per player (draws half). */
   arenaGoldPerWave: number;
   arenaMaxMs: number;
+  /** Prophet: rerolls of the fighter roster; the n-th costs n × rerollCost gold and lumber. */
+  prophet: { rerolls: number; rerollCost: number };
   king: KingRules;
 }
 

@@ -1,5 +1,5 @@
 import type { GameEvent } from '../sim/game.ts';
-import type { Phase, TeamId, UnitKind } from '../sim/types.ts';
+import type { GameData, Phase, TeamId, UnitKind } from '../sim/types.ts';
 import { EFFECT_KINDS } from '../sim/abilities.ts';
 
 export const ROOM_NAME = 'legion';
@@ -20,11 +20,24 @@ export const MODES = {
   ap: { name: 'ALL PICK', hint: 'EVERYONE PICKS A BUILDER' },
   ar: { name: 'ALL RANDOM', hint: 'BUILDERS ARE ROLLED AT START' },
   sd: { name: 'SINGLE DRAFT', hint: 'PICK ONE OF TWO RANDOM BUILDERS' },
+  apr: { name: 'ALL PROPHET', hint: 'EVERYONE PLAYS THE PROPHET' },
 } as const;
 export type ModeId = keyof typeof MODES;
 export const MODE_IDS = Object.keys(MODES) as ModeId[];
 /** Builders offered per player in single draft. */
 export const DRAFT_SIZE = 2;
+
+/** Builders random and draft rolls may hand out: every real one, not the Prophet. */
+export function rollableBuilders(data: GameData): string[] {
+  return Object.values(data.builders)
+    .filter((b) => !b.random)
+    .map((b) => b.id);
+}
+
+/** Modes that assign the builder instead of letting players pick. */
+export function modeLocksBuilder(mode: string): boolean {
+  return mode === 'ar' || mode === 'apr';
+}
 
 /** Lobby messages a client may send (message type -> payload). */
 export interface LobbyMessages {

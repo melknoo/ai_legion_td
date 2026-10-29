@@ -9,6 +9,10 @@ export interface SlotButtonOptions {
   h: number;
   /** Icon area offset inside the button. */
   iconY?: number;
+  /** Small tiles: show only this band of a tall icon (portraits), skipping `top` rows. */
+  iconCrop?: { top: number; height: number };
+  /** Lay the type badges out side by side (short tiles) instead of stacked. */
+  badgeRow?: boolean;
   onClick: () => void;
   onHover: (over: boolean) => void;
 }
@@ -22,6 +26,7 @@ export class SlotButton {
   private readonly bg: Phaser.GameObjects.Image;
   private readonly icon: Phaser.GameObjects.Image;
   private readonly hue: Phaser.Filters.ColorMatrix;
+  private readonly cornerBg: Phaser.GameObjects.Rectangle;
   private readonly corner: Phaser.GameObjects.BitmapText;
   private readonly labelBg: Phaser.GameObjects.Rectangle;
   private readonly costIcon: Phaser.GameObjects.Image;
@@ -44,15 +49,18 @@ export class SlotButton {
     this.bg = scene.add.image(0, 0, this.textures.slot).setOrigin(0, 0);
     this.icon = scene.add.image(Math.floor(o.w / 2), o.iconY ?? 2, '__DEFAULT').setOrigin(0.5, 0);
     this.hue = this.icon.enableFilters().filters!.internal.addColorMatrix();
+    // Hotkey letter, backed like the label so it reads on bright portraits.
+    this.cornerBg = scene.add.rectangle(2, 2, 1, 9, 0x0c1240, 0.85).setOrigin(0, 0);
     this.corner = scene.add.bitmapText(3, 3, FONT, '').setTint(0xfff080);
     // Dark strip keeps the label readable where it overlaps a portrait.
     this.labelBg = scene.add.rectangle(0, o.h - 11, 1, 10, 0x0c1240, 0.85).setOrigin(0, 0);
     this.costIcon = scene.add.image(0, o.h - 10, '__DEFAULT').setOrigin(0, 0);
     this.label = scene.add.bitmapText(0, o.h - 10, FONT, '');
     // Small type icons stacked in the top-right corner.
-    this.badgeBg = scene.add.rectangle(o.w - 11, 2, 9, 9, 0x0c1240, 0.85).setOrigin(0, 0);
-    this.badges = [0, 1].map((i) => scene.add.image(o.w - 10, 3 + i * 9, '__DEFAULT').setOrigin(0, 0));
-    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges]);
+    const row = o.badgeRow ? 1 : 0;
+    this.badgeBg = scene.add.rectangle(o.w - 11 - row * 9, 2, 9, 9, 0x0c1240, 0.85).setOrigin(0, 0);
+    this.badges = [0, 1].map((i) => scene.add.image(o.w - 10 - row * (1 - i) * 9, 3 + (1 - row) * i * 9, '__DEFAULT').setOrigin(0, 0));
+    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges]);
     this.bg
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => this.hover(true))
@@ -74,16 +82,28 @@ export class SlotButton {
       b.setVisible(!!spec);
       if (spec) b.setTexture(spec.icon).setTint(spec.tint);
     });
-    this.badgeBg.setVisible(badges.length > 0).setSize(9, badges.length * 9 + 1).setFillStyle(opts.badgeBg ?? 0x0c1240, 0.85);
+    const along = badges.length * 9 + 1;
+    this.badgeBg
+      .setVisible(badges.length > 0)
+      .setSize(this.o.badgeRow ? along : 9, this.o.badgeRow ? 9 : along)
+      .setFillStyle(opts.badgeBg ?? 0x0c1240, 0.85);
     const hue = opts.hue ?? 0;
     if (icon !== this.iconKey || hue !== this.iconHue) {
       this.iconKey = icon;
       this.iconHue = hue;
       this.icon.setTexture(icon);
+      const crop = this.o.iconCrop;
+      if (crop && this.icon.height > crop.height) {
+        this.icon.setCrop(0, crop.top, this.icon.width, crop.height).setY((this.o.iconY ?? 2) - crop.top);
+      } else {
+        this.icon.setCrop().setY(this.o.iconY ?? 2);
+      }
       this.hue.colorMatrix.reset();
       if (hue) this.hue.colorMatrix.hue(hue);
     }
-    this.corner.setText(opts.corner ?? '');
+    const corner = opts.corner ?? '';
+    this.corner.setText(corner);
+    this.cornerBg.setVisible(corner.length > 0).setSize(corner.length * 8 + 1, 9);
     this.label.setText(label).setTint(opts.labelColor ?? 0xffffff);
     const iconW = opts.costIcon ? 9 : 0;
     const left = Math.floor((this.o.w - (label.length * 8 + iconW)) / 2);

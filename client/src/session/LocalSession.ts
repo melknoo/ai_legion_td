@@ -1,7 +1,10 @@
 import {
   Game,
+  PROPHET,
   TICK_MS,
   botCommands,
+  modeLocksBuilder,
+  rollableBuilders,
   type Command,
   type CommandResult,
   type GameData,
@@ -28,14 +31,14 @@ export class LocalSession implements Session {
   private readonly prev = new Map<number, { x: number; y: number; area: number }>();
 
   constructor(data: GameData, config: SoloConfig, seed = Date.now() % 100000) {
-    const ids = Object.keys(data.builders);
-    const random = () => ids[Math.floor(Math.random() * ids.length)]!;
+    const ids = rollableBuilders(data);
+    const random = () => (config.mode === 'apr' ? PROPHET : ids[Math.floor(Math.random() * ids.length)]!);
     const seat = (name: string, team: TeamId, builder = random()) => ({ id: name.toLowerCase(), name, team, builder });
     this.game = new Game({
       seed,
       data,
       players: [
-        seat('You', 0, config.mode === 'ar' ? random() : config.builder),
+        seat('You', 0, modeLocksBuilder(config.mode) ? random() : config.builder),
         ...Array.from({ length: config.teamSize - 1 }, (_, i) => seat(`Ally ${i + 1}`, 0)),
         ...Array.from({ length: config.teamSize }, (_, i) => seat(`Bot ${i + 1}`, 1)),
       ],

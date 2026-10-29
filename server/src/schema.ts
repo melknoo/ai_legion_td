@@ -47,6 +47,9 @@ export const NetPlayer = schema(
     leaks: t.uint16(),
     foodCap: t.uint8(),
     farmLevel: t.uint8(),
+    /** Buildable fighters (differs from the builder's for a Prophet). */
+    fighters: t.array('string'),
+    rerolls: t.uint8(),
   },
   'NetPlayer',
 );
@@ -57,7 +60,7 @@ export const NetState = schema(
     /** lobby | playing | over */
     status: t.string(),
     host: t.string(),
-    /** Builder selection mode: ap | ar | sd. */
+    /** Builder selection mode: ap | ar | sd | apr. */
     mode: t.string(),
     /** Slot order is the player index in the game. */
     players: t.array(NetPlayer),

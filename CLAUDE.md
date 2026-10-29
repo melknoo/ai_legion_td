@@ -10,13 +10,13 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 
 ## Architecture
 - `shared/`: deterministic simulation (`sim/game.ts`, 20 Hz, seeded `rng.ts`), abilities (`sim/abilities.ts`, 12 effect kinds; data in `data/abilities.ts` + one file per builder in `data/abilities/`), bot (`sim/bot.ts`), content (`data/legion.ts`; fighters are generated into `data/fighters.generated.ts`).
-- `server/`: Colyseus 0.18 `LegionRoom` – lobby (modes AP/AR/SD, bots fill seats), then runs the authoritative sim and sends patches + `ev` event batches. Clients only send commands.
+- `server/`: Colyseus 0.18 `LegionRoom` – lobby (modes AP/AR/SD/All Prophet, bots fill seats), then runs the authoritative sim and sends patches + `ev` event batches. Clients only send commands.
 - `client/`: Phaser 4 + Vite. `Session` interface with `LocalSession` (solo vs bots, sim in the browser) and `NetSession`. `BattleScene` draws the field, `UiScene` the HUD on top.
 - Screen: canvas 960x540; menus/HUD are laid out at 480x270 and drawn at 2x via `layoutCamera()` (`client/src/layout.ts`); the battlefield camera uses zoom 3. World units → field pixels via `SCALE` 0.25.
 - Graphics: Ninja Adventure pack (CC0) in `client/public/assets/ninja`, mapped in `client/src/assets/manifest.ts` and the generated `sprites.generated.ts`.
 
 ## Content pipeline
-- 18 builders + Chimera (morph eggs that hatch into a random fighter of the same tier) = 232 fighters. Pharaoh is skipped on purpose (unfinished in the original).
+- 18 builders + Chimera (morph eggs that hatch into a random fighter of the same tier) = 232 fighters. The Prophet (`random` builder) has no fighters of its own: the sim rolls each player a roster in `PlayerState.fighters`, so read that, never `builders[..].fighters`. Pharaoh is skipped on purpose (unfinished in the original).
 - New names/sprites go in `tools/map-extract/rename-fighters.json` or `rename-parts/<builderId>.json`, then run the exporter (command in README). It needs `reference/analysis/builders.json`, which is not in git – copy `reference/` over by hand. Without it the game still runs; only regeneration fails.
 - `reference/` (when present): `map/` (3.47lHf3 from epicwar.com/maps/356721 – Reforged v3 object data, obfuscated JASS; 3.44 from /maps/327712 – readable GUI trigger names, use it for logic), `analysis/` (builders.json/md, builder-abilities.md, jass-mechanics.md).
 
@@ -26,6 +26,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - Phaser re-dispatches queued key events; keyboard input is deduped in `client/src/ui/keys.ts`.
 - No pushback: enemies cannot shove a unit that is fighting (`engaged` set in `game.ts`). A test guards this.
 - Bosses (waves 10/20/30) take stuns/slows at `BOSS_CC_FACTOR` 0.25.
+- Hosting: Fly.io via `Dockerfile` + `fly.toml`; the server serves `client/dist` when `CLIENT_DIR` is set, and the client connects to its own origin in production builds. Keep one machine (`fly deploy --ha=false`): rooms are in memory.
 - Browser testing: a background/occluded Chrome window throttles `requestAnimationFrame`; use `?timeout&fast`.
 
 ## Verify
@@ -34,4 +35,4 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 ## Open
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
-- Later: Prophet, leak-bounty factor, team-size balancing, music/SFX and settings, client auto-reconnect, `npm audit` warnings, hosting (Docker image, server also serves the client).
+- Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music/SFX and settings, client auto-reconnect, `npm audit` warnings.

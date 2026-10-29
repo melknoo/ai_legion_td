@@ -26,6 +26,10 @@ export interface PlayerState {
   name: string;
   team: TeamId;
   builder: string;
+  /** Fighters this player can build: the builder's, or a Prophet's rolled roster. */
+  fighters: string[];
+  /** Prophet rerolls used. */
+  rerolls: number;
   gold: number;
   lumber: number;
   income: number;
@@ -90,7 +94,8 @@ export type Command =
   | { type: 'sendMerc'; player: number; merc: string }
   | { type: 'buyWorker'; player: number }
   | { type: 'upgradeFarm'; player: number }
-  | { type: 'upgradeKing'; player: number; stat: KingStat };
+  | { type: 'upgradeKing'; player: number; stat: KingStat }
+  | { type: 'reroll'; player: number };
 
 export type GameEvent =
   | { type: 'phase'; phase: Phase; wave: number; endsAtMs: number }
@@ -157,6 +162,8 @@ export class Game implements GameView {
     this.players = config.players.map((p, index) => ({
       index,
       ...p,
+      fighters: this.data.builders[p.builder]?.random ? this.rollRoster() : [...(this.data.builders[p.builder]?.fighters ?? [])],
+      rerolls: 0,
       gold: r.startGold,
       lumber: r.startLumber,
       income: r.startIncome,
@@ -193,6 +200,8 @@ export class Game implements GameView {
         return this.upgradeFarm(player);
       case 'upgradeKing':
         return this.upgradeKing(player, cmd.stat);
+      case 'reroll':
+        return this.reroll(player);
     }
   }
 
@@ -242,8 +251,7 @@ export class Game implements GameView {
 
   private build(player: PlayerState, unitId: string, col: number, row: number): CommandResult {
     if (this.phase !== 'build') return fail('building only during build phase');
-    const builder = this.data.builders[player.builder];
-    if (!builder?.fighters.includes(unitId)) return fail('unit not available for builder');
+    if (!player.fighters.includes(unitId)) return fail('unit not available for builder');
     if (!isValidCell(col, row)) return fail('invalid cell');
     for (const u of this.units.values()) {
       if (u.kind === 'fighter' && u.owner === player.index && u.cell?.col === col && u.cell.row === row) return fail('cell occupied');
@@ -260,6 +268,26 @@ export class Game implements GameView {
     u.cell = { col, row };
     u.invested = cost;
     u.fresh = true;
+    return { ok: true };
+  }
+
+  /** Prophet roster: one random base fighter per tier. */
+  private rollRoster(): string[] {
+    return [1, 2, 3, 4, 5, 6].flatMap((tier) => this.rng.pick(this.morphPool(tier)) ?? []);
+  }
+
+  /** Prophets swap their whole roster for a fresh roll; each reroll costs more than the last. */
+  private reroll(player: PlayerState): CommandResult {
+    const r = this.data.rules.prophet;
+    if (!this.data.builders[player.builder]?.random) return fail('only prophets can reroll');
+    if (player.rerolls >= r.rerolls) return fail('no rerolls left');
+    const cost = rerollCost(this.data, player);
+    if (player.gold < cost) return fail('not enough gold');
+    if (player.lumber < cost) return fail('not enough lumber');
+    player.gold -= cost;
+    player.lumber -= cost;
+    player.rerolls++;
+    player.fighters = this.rollRoster();
     return { ok: true };
   }
 
@@ -961,4 +989,9 @@ export class Game implements GameView {
 
 function fail(error: string): CommandResult {
   return { ok: false, error };
+}
+
+/** Gold and lumber the player's next Prophet reroll costs. */
+export function rerollCost(data: GameData, player: PlayerState): number {
+  return (player.rerolls + 1) * data.rules.prophet.rerollCost;
 }

@@ -214,7 +214,7 @@ describe('legion content', () => {
     expect(Object.keys(d.builders).length).toBeGreaterThanOrEqual(5);
     expect(d.waves).toHaveLength(31);
     for (const b of Object.values(d.builders)) {
-      expect(b.fighters).toHaveLength(6);
+      expect(b.fighters).toHaveLength(b.random ? 0 : 6);
       for (const id of b.fighters) expect(d.units[id]).toBeDefined();
     }
     for (const u of Object.values(d.units)) for (const to of u.upgradesTo ?? []) expect(d.units[to]).toBeDefined();
@@ -236,6 +236,50 @@ describe('legion content', () => {
     expect(Object.values(d.builders).some((b) => b.id !== 'chimera' && b.fighters.includes(u!.def))).toBe(true);
     expect(g.players[0]!.gold).toBe(gold - d.units['chimera-egg-2']!.goldCost!);
     expect(u!.invested).toBe(d.units['chimera-egg-2']!.goldCost);
+  });
+
+  it('a prophet rolls one fighter per tier from the other builders, seeded', async () => {
+    const { LEGION_DATA: d, PROPHET } = await import('../data/legion.ts');
+    const roster = (seed: number) =>
+      new Game({ seed, data: d, players: [{ id: 'a', name: 'A', team: 0, builder: PROPHET }, { id: 'b', name: 'B', team: 1, builder: 'grove' }] }).players[0]!.fighters;
+    const r = roster(5);
+    expect(r.map((id) => d.units[id]!.tier)).toEqual([1, 2, 3, 4, 5, 6]);
+    for (const id of r) expect(Object.values(d.builders).some((b) => !b.random && !d.units[id]!.morph && b.fighters.includes(id))).toBe(true);
+    expect(roster(5)).toEqual(r);
+    const g = new Game({ seed: 5, data: d, players: [{ id: 'a', name: 'A', team: 0, builder: PROPHET }, { id: 'b', name: 'B', team: 1, builder: 'grove' }] });
+    expect(g.apply({ type: 'build', player: 0, unit: r[0]!, col: 0, row: 0 }).ok).toBe(true);
+    const other = d.builders.grove!.fighters.find((id) => !r.includes(id))!;
+    expect(g.apply({ type: 'build', player: 0, unit: other, col: 1, row: 0 }).ok).toBe(false);
+  });
+
+  it('prophets reroll for rising gold and lumber, a limited number of times', async () => {
+    const { PROPHET } = await import('../data/legion.ts');
+    const base = testData();
+    const data = { ...base, builders: { ...base.builders, [PROPHET]: { id: PROPHET, name: 'Prophet', fighters: [], random: true } } };
+    // The test data has tier-less fighters only; give them tiers so a roster can be rolled.
+    data.units = { ...data.units, sprout: { ...data.units.sprout!, tier: 1 }, archer: { ...data.units.archer!, tier: 2 } };
+    const g = new Game({ seed: 1, data, players: [{ id: 'a', name: 'A', team: 0, builder: PROPHET }, { id: 'b', name: 'B', team: 1, builder: 'grove' }] });
+    const p = g.players[0]!;
+    expect(p.fighters).toEqual(['sprout', 'archer']);
+    const { gold, lumber } = p;
+    expect(g.apply({ type: 'reroll', player: 0 }).ok).toBe(true);
+    expect(g.apply({ type: 'reroll', player: 0 }).ok).toBe(true);
+    // rerollCost 10: 10 + 20 spent, and the test rules allow two rerolls.
+    expect([p.gold, p.lumber, p.rerolls]).toEqual([gold - 30, lumber - 30, 2]);
+    expect(g.apply({ type: 'reroll', player: 0 })).toEqual({ ok: false, error: 'no rerolls left' });
+    expect(g.apply({ type: 'reroll', player: 1 }).ok).toBe(false);
+  });
+
+  it('bots play the prophet', async () => {
+    const { LEGION_DATA: d, PROPHET } = await import('../data/legion.ts');
+    const { botCommands } = await import('./bot.ts');
+    const g = new Game({ seed: 2, data: d, players: [{ id: 'a', name: 'A', team: 0, builder: PROPHET }, { id: 'b', name: 'B', team: 1, builder: PROPHET }] });
+    for (let i = 0; i < 400; i++) {
+      for (const p of [0, 1]) for (const cmd of botCommands(g, p)) g.apply(cmd);
+      g.tick();
+    }
+    expect(fightersOf(g, 0).length).toBeGreaterThan(0);
+    expect(fightersOf(g, 1).length).toBeGreaterThan(0);
   });
 
   it('a bot-free 4v4 game with no defenders ends by a king dying', async () => {

@@ -86,6 +86,8 @@ const BUILDER_PORTRAIT: Record<string, string> = {
   crypt: 'bonecaller',
   order: 'lancer',
   chimera: 'chimera-egg-6',
+  // The Prophet has no fighters of its own; the old diviner stands in.
+  prophet: 'hermit',
 };
 
 export function builderPortrait(builder: { id: string; fighters: string[] }): string {

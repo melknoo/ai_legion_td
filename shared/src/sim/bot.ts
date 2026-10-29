@@ -51,8 +51,7 @@ export function botCommands(game: Game, player: number): Command[] {
 
   // Spread gold over several fighters (the best one costing at most half the purse, rated by
   // cost and type fit); when food runs short, every slot should hold the strongest fighter.
-  const builder = game.data.builders[p.builder]!;
-  const affordable = builder.fighters.filter((id) => cost(id) <= p.gold && food(id) <= foodLeft);
+  const affordable = p.fighters.filter((id) => cost(id) <= p.gold && food(id) <= foodLeft);
   const pool = foodLeft <= 4 ? affordable : affordable.filter((id) => cost(id) <= p.gold / 2);
   const unit = [...(pool.length ? pool : affordable)].sort((a, b) => cost(b) * fit(b) - cost(a) * fit(a))[0];
   if (!unit) return [];

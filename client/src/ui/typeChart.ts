@@ -41,7 +41,7 @@ export function typeChart(scene: Phaser.Scene, game: GameView, player: number, c
   // Every attack type the builder can field, upgrades included.
   const mine = new Set<string>();
   const seen = new Set<string>();
-  const queue = [...game.data.builders[game.players[player]!.builder]!.fighters];
+  const queue = [...game.players[player]!.fighters];
   for (const id of queue) {
     const d = game.data.units[id];
     if (!d || seen.has(id)) continue;

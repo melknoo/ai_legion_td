@@ -20,7 +20,7 @@ import type { Session } from './Session.ts';
 /** Loose shape of the synced schema state (see server/src/schema.ts). */
 interface NetStateLike {
   status: string;
-  players: Iterable<{ sessionId: string; name: string; team: number; builder: string; gold: number; lumber: number; income: number; workers: number; leaks: number; foodCap: number; farmLevel: number }>;
+  players: Iterable<{ sessionId: string; name: string; team: number; builder: string; gold: number; lumber: number; income: number; workers: number; leaks: number; foodCap: number; farmLevel: number; fighters?: Iterable<string>; rerolls?: number }>;
   units: { forEach(cb: (n: NetUnitLike, key: string) => void): void };
   phase: string;
   wave: number;
@@ -102,6 +102,8 @@ export class NetGameView implements GameView {
       name: p.name,
       team: p.team as TeamId,
       builder: p.builder,
+      fighters: [...(p.fighters ?? [])],
+      rerolls: p.rerolls ?? 0,
       gold: p.gold ?? 0,
       lumber: p.lumber ?? 0,
       income: p.income ?? 0,

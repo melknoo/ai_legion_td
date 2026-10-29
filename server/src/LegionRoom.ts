@@ -7,9 +7,12 @@ import {
   UNIT_KINDS,
   DRAFT_SIZE,
   MODE_IDS,
+  PROPHET,
   botCommands,
   encodeEvents,
+  modeLocksBuilder,
   rollBuilders,
+  rollableBuilders,
   type GameData,
   type GameEvent,
   type JoinOptions,
@@ -19,7 +22,7 @@ import {
 } from '@legion/shared';
 import { NetPlayer, NetState, NetUnit } from './schema.ts';
 
-const COMMANDS = new Set(['build', 'upgrade', 'sell', 'sendMerc', 'buyWorker', 'upgradeKing', 'upgradeFarm']);
+const COMMANDS = new Set(['build', 'upgrade', 'sell', 'sendMerc', 'buyWorker', 'upgradeKing', 'upgradeFarm', 'reroll']);
 /** Ticks between event broadcasts; matches the 100 ms patch rate. */
 const EVENT_EVERY = 2;
 
@@ -49,7 +52,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
 
     this.onMessage('setBuilder', (client, builder: string) => {
       const p = this.slotOf(client);
-      if (!p || !this.inLobby() || !this.data.builders[builder] || this.state.mode === 'ar') return;
+      if (!p || !this.inLobby() || !this.data.builders[builder] || modeLocksBuilder(this.state.mode)) return;
       if (this.state.mode === 'sd' && !p.offer.includes(builder)) return;
       p.builder = builder;
     });
@@ -68,7 +71,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     });
     this.onMessage('addBot', (client, team: TeamId) => {
       if (!this.isHost(client) || !this.inLobby() || (team !== 0 && team !== 1) || this.teamSize(team) >= MAX_TEAM_SIZE) return;
-      const builders = Object.keys(this.data.builders);
+      const builders = rollableBuilders(this.data);
       const bot = new NetPlayer();
       bot.name = `BOT ${this.state.players.length + 1}`;
       bot.team = team;
@@ -146,7 +149,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     }
     // All random: builders are only revealed when the match begins.
     if (this.state.mode === 'ar') {
-      for (const p of players) p.builder = rollBuilders(Object.keys(this.data.builders), 1, Math.random)[0]!;
+      for (const p of players) p.builder = rollBuilders(rollableBuilders(this.data), 1, Math.random)[0]!;
     }
     this.game = new Game({
       seed: Math.floor(Math.random() * 2 ** 31),
@@ -203,6 +206,11 @@ export class LegionRoom extends Room<{ state: NetState }> {
       if (p.leaks !== gp.leaks) p.leaks = gp.leaks;
       if (p.foodCap !== gp.foodCap) p.foodCap = gp.foodCap;
       if (p.farmLevel !== gp.farmLevel) p.farmLevel = gp.farmLevel;
+      if (p.rerolls !== gp.rerolls) p.rerolls = gp.rerolls;
+      if (p.fighters.join() !== gp.fighters.join()) {
+        p.fighters.clear();
+        for (const id of gp.fighters) p.fighters.push(id);
+      }
     });
 
     for (const u of game.units.values()) {
@@ -242,11 +250,12 @@ export class LegionRoom extends Room<{ state: NetState }> {
 
   // ---- helpers ---------------------------------------------------------------
 
-  /** Single draft deals each slot a fresh offer; other modes clear it. */
+  /** Single draft deals each slot a fresh offer, All Prophet seats everyone as Prophet; other modes clear the offer. */
   private applyMode(p: NetPlayer): void {
     p.offer.clear();
+    if (this.state.mode === 'apr') p.builder = PROPHET;
     if (this.state.mode !== 'sd') return;
-    const offer = rollBuilders(Object.keys(this.data.builders), DRAFT_SIZE, Math.random);
+    const offer = rollBuilders(rollableBuilders(this.data), DRAFT_SIZE, Math.random);
     for (const b of offer) p.offer.push(b);
     p.builder = offer[0]!;
   }

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, rollBuilders, type ModeId } from '@legion/shared';
+import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, PROPHET, modeLocksBuilder, rollBuilders, rollableBuilders, type ModeId } from '@legion/shared';
 import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import type { SoloConfig } from '../session/LocalSession.ts';
@@ -86,7 +86,7 @@ export class TitleScene extends Phaser.Scene {
       const random = this.solo.mode === 'ar';
       this.preview.hint.setText(MODES[this.solo.mode].hint);
       this.preview.portrait.setVisible(!random);
-      if (!random) this.preview.portrait.setTexture(facesetKey(builderPortrait(LEGION_DATA.builders[this.solo.builder]!)));
+      if (!random) this.preview.portrait.setTexture(facesetKey(builderPortrait(LEGION_DATA.builders[this.soloBuilder()]!)));
     }
   }
 
@@ -168,13 +168,13 @@ export class TitleScene extends Phaser.Scene {
     const i = MODE_IDS.indexOf(this.solo.mode);
     this.solo.mode = MODE_IDS[(i + step + MODE_IDS.length) % MODE_IDS.length] as ModeId;
     if (this.solo.mode === 'sd') {
-      this.draft = rollBuilders(BUILDERS, DRAFT_SIZE, Math.random);
+      this.draft = rollBuilders(rollableBuilders(LEGION_DATA), DRAFT_SIZE, Math.random);
       this.solo.builder = this.draft[0]!;
     }
   }
 
   private cycleBuilder(step: number): void {
-    if (this.solo.mode === 'ar') return;
+    if (modeLocksBuilder(this.solo.mode)) return;
     const pool = this.solo.mode === 'sd' ? this.draft : BUILDERS;
     const i = pool.indexOf(this.solo.builder);
     this.solo.builder = pool[(i + step + pool.length) % pool.length]!;
@@ -185,7 +185,12 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private builderLabel(): string {
-    return this.solo.mode === 'ar' ? 'RANDOM' : LEGION_DATA.builders[this.solo.builder]!.name.toUpperCase();
+    return this.solo.mode === 'ar' ? 'RANDOM' : LEGION_DATA.builders[this.soloBuilder()]!.name.toUpperCase();
+  }
+
+  /** The builder the solo game will use (All Prophet overrides the pick). */
+  private soloBuilder(): string {
+    return this.solo.mode === 'apr' ? PROPHET : this.solo.builder;
   }
 
   private startSolo(): void {

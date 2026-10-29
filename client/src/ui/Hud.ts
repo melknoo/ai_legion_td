@@ -1,14 +1,20 @@
 import Phaser from 'phaser';
-import { describeAbility, type GameView, type KingStat, type TeamId, type UnitDef, type UnitState } from '@legion/shared';
-import { UNIT_SPRITES, spriteKey } from '../assets/manifest.ts';
+import { describeAbility, rerollCost, type GameView, type KingStat, type TeamId, type UnitDef, type UnitState } from '@legion/shared';
+import { UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifest.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window } from './ff6Window.ts';
 import { RichLine, type Segment } from './RichLine.ts';
 import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
+import { SLOT_KEYS } from './keys.ts';
 
-/** What the six slots offer: fighters for gold or sends for lumber. */
+/** What the command card offers: fighters for gold or sends for lumber. */
 export type SlotMode = 'build' | 'send';
+
+/** Sends per command card page (the whole 4x3 grid). */
+export const SEND_PAGE_SIZE = SLOT_KEYS.length;
+/** Build mode: the Prophet's reroll sits in the last slot. */
+export const REROLL_SLOT = SLOT_KEYS.length - 1;
 
 export interface HudState {
   /** Fighter slot armed for placement, or null. */
@@ -119,15 +125,17 @@ export class Hud {
     scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(myTeam === 0 ? 0xff8080 : 0x80b0ff);
     this.kingBars = scene.add.graphics();
 
-    // Bottom panels (y 186..270). Left: build / send slots plus a column of mode buttons.
+    // Bottom panels (y 186..270). Left: 4x3 command card (QWER / ASDF / YXCV) plus a column of mode buttons.
     ff6Window(scene, 2, 186, 178, 84);
-    this.slots = Array.from({ length: 6 }, (_, i) =>
+    this.slots = SLOT_KEYS.map((_, i) =>
       new SlotButton(scene, {
-        x: 5 + (i % 3) * 53,
-        y: 189 + Math.floor(i / 3) * 40,
-        w: 52,
-        h: 39,
+        x: 5 + (i % 4) * 39,
+        y: 189 + Math.floor(i / 4) * 26,
+        w: 38,
+        h: 25,
         iconY: 0,
+        iconCrop: { top: 5, height: 25 },
+        badgeRow: true,
         onClick: () => act.pickSlot(i),
         onHover: hoverFn({ on: 'slot', index: i }),
       }),
@@ -203,9 +211,9 @@ export class Hud {
     // Slots: fighters for gold, or sends for lumber (build phase: either, wave: sends only).
     const send = s.slotMode === 'send';
     const open = g.phase === 'build' || g.phase === 'fight';
-    const builder = g.data.builders[me.builder]!;
+    const prophet = !!g.data.builders[me.builder]?.random;
     const sends = Object.values(g.data.mercs);
-    const pages = Math.ceil(sends.length / 6);
+    const pages = Math.ceil(sends.length / SEND_PAGE_SIZE);
     this.modeButtons.build.setState(g.phase === 'build', !send);
     this.modeButtons.send.setState(open, send);
     this.pageButton.setVisible(send && open && pages > 1);
@@ -214,7 +222,7 @@ export class Hud {
     const creep = wave ? g.data.units[wave.creep] : undefined;
     this.slots.forEach((slot, i) => {
       if (send) {
-        const merc = sends[s.sendPage * 6 + i];
+        const merc = sends[s.sendPage * SEND_PAGE_SIZE + i];
         slot.setVisible(!!merc && open);
         if (!merc) return;
         // Advanced sends stay locked until their wave.
@@ -222,7 +230,7 @@ export class Hud {
         const ok = !locked && me.lumber >= merc.lumberCost;
         slot.setContent(facesetKey(merc.unit), locked ? `W${merc.minWave}` : String(merc.lumberCost), {
           hue: UNIT_SPRITES[merc.unit]?.hue,
-          corner: String(i + 1),
+          corner: SLOT_KEYS[i],
           costIcon: locked ? undefined : 'icon-log',
           labelColor: ok || locked ? 0xffffff : 0xff7070,
           badges: this.badges(g.data.units[merc.unit]!),
@@ -230,7 +238,19 @@ export class Hud {
         slot.setState(ok);
         return;
       }
-      const id = builder.fighters[i];
+      if (i === REROLL_SLOT && prophet) {
+        const left = g.data.rules.prophet.rerolls - me.rerolls;
+        const cost = rerollCost(g.data, me);
+        const ok = left > 0 && me.gold >= cost && me.lumber >= cost;
+        slot.setVisible(g.phase === 'build');
+        slot.setContent(facesetKey(builderPortrait(g.data.builders[me.builder]!)), left > 0 ? String(cost) : 'MAX', {
+          corner: SLOT_KEYS[i],
+          labelColor: ok || left <= 0 ? 0xffffff : 0xff7070,
+        });
+        slot.setState(ok);
+        return;
+      }
+      const id = me.fighters[i];
       slot.setVisible(!!id && g.phase === 'build');
       if (!id) return;
       const d = g.data.units[id]!;
@@ -241,14 +261,14 @@ export class Hud {
       const vs = creep ? g.data.damageTable[d.attack.type][creep.armorType] : 1;
       slot.setContent(facesetKey(id), String(cost), {
         hue: UNIT_SPRITES[id]?.hue,
-        corner: String(i + 1),
+        corner: SLOT_KEYS[i],
         costIcon: 'icon-coin',
         labelColor: ok ? 0xffffff : 0xff7070,
         badges: this.badges(d),
         badgeBg: vs > 1.001 ? 0x1c6a28 : vs < 0.999 ? 0x7a2020 : undefined,
       });
       slot.setState(ok, active);
-      if (active) this.hand.setVisible(true).setPosition(slot.root.x + 2, slot.root.y + 20);
+      if (active) this.hand.setVisible(true).setPosition(slot.root.x + 2, slot.root.y + 13);
     });
 
     // Resources and upgrade buttons.
@@ -259,7 +279,7 @@ export class Hud {
     const r = g.data.rules;
     this.worker.setContent('btn-worker', `${me.workers}`, { corner: 'B' }).setState(me.gold >= r.workerCost && me.workers < r.maxWorkers);
     const farm = r.farms[me.farmLevel];
-    this.farm.setContent('btn-farm', `${me.farmLevel}`, { corner: 'F' }).setState(!!farm && me.gold >= farm.gold && me.lumber >= farm.lumber);
+    this.farm.setContent('btn-farm', `${me.farmLevel}`, { corner: 'G' }).setState(!!farm && me.gold >= farm.gold && me.lumber >= farm.lumber);
     this.kingButtons.forEach((b, i) => {
       const k = KING_BUTTONS[i]!;
       const lvl = g.kingLevels[me.team][k.stat];
@@ -294,22 +314,27 @@ export class Hud {
 
     if (h?.on === 'slot') {
       if (s.slotMode === 'send') {
-        const merc = Object.values(g.data.mercs)[s.sendPage * 6 + h.index];
+        const merc = Object.values(g.data.mercs)[s.sendPage * SEND_PAGE_SIZE + h.index];
         // Build-phase sends join the coming wave, sends during a wave the one after.
         const joins = g.phase === 'build' ? g.wave : g.wave + 1;
         if (merc) return this.showUnit(merc.unit, `SEND ${merc.lumberCost}L`, 'attacker', `+${merc.incomeGain} INCOME\nJOINS WAVE ${joins}`);
+      } else if (h.index === REROLL_SLOT && g.data.builders[me.builder]?.random) {
+        const left = r.prophet.rerolls - me.rerolls;
+        const cost = rerollCost(g.data, me);
+        const price = left > 0 ? `${cost}G ${cost}L` : 'NONE LEFT';
+        return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `REROLLS ALL SIX\n${left}/${r.prophet.rerolls} LEFT`);
       } else {
-        const id = g.data.builders[me.builder]!.fighters[h.index];
+        const id = me.fighters[h.index];
         if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${g.data.units[id]?.goldCost}G`, 'fighter', 'CLICK, THEN PLACE\nSHIFT: PLACE MANY');
       }
     }
     if (h?.on === 'mode') {
-      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', 'Q: SWITCH', 'FIGHTERS FOR GOLD\nONLY BETWEEN WAVES');
-      return this.showText('icon-log', 'SEND', 'Q: SWITCH', 'UNITS FOR LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
+      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR GOLD\nONLY BETWEEN WAVES');
+      return this.showText('icon-log', 'SEND', '1/2: SWITCH', 'UNITS FOR LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
     }
     if (h?.on === 'page') {
-      const pages = Math.ceil(Object.keys(g.data.mercs).length / 6);
-      return this.showText('icon-log', 'MORE SENDS', `PAGE ${s.sendPage + 1}/${pages}`, 'N: NEXT PAGE');
+      const pages = Math.ceil(Object.keys(g.data.mercs).length / SEND_PAGE_SIZE);
+      return this.showText('icon-log', 'MORE SENDS', `PAGE ${s.sendPage + 1}/${pages}`, '2 OR N: NEXT PAGE');
     }
     if (h?.on === 'chart') {
       return this.showText(ARMOR_ICON, 'DAMAGE TYPES', 'T: OPEN CHART', 'ATTACK TYPE VS\nARMOR TYPE DECIDES\nHOW HARD A HIT IS');
@@ -338,7 +363,7 @@ export class Hud {
     if (live) return this.showLive(live);
     // Idle: preview the wave that is coming (or running).
     const wave = g.data.waves[g.wave - 1];
-    if (!wave) return this.showText('icon-hand', 'COMMANDS', '', '1-6 BUILD/SEND\nQ: BUILD/SEND MODE\nT: DAMAGE CHART\nCLICK UNIT: SELECT');
+    if (!wave) return this.showText('icon-hand', 'COMMANDS', '', 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT');
     const creep = g.data.units[wave.creep]!;
     const label = g.phase === 'build' ? 'NEXT' : 'NOW';
     this.showUnit(wave.creep, `${label} ${wave.count}X ${Math.round(creep.hp * r.creepHpMultiplier)}HP`, 'attacker', wave.endless ? 'ENDLESS FINALE!' : creep.boss ? `BOSS! BOUNTY ${creep.bounty}` : `BOUNTY ${creep.bounty} GOLD`);
@@ -460,7 +485,7 @@ export class Hud {
         b.setState(me.gold >= cost);
       } else {
         const refund = unit.fresh ? unit.invested : Math.floor(unit.invested * this.game.data.rules.sellRefund);
-        b.setContent('btn-sell', String(refund), { costIcon: 'icon-coin', corner: 'S' }).setState(true);
+        b.setContent('btn-sell', String(refund), { costIcon: 'icon-coin', corner: 'DEL' }).setState(true);
       }
     });
     // Leave room for the action buttons below the stats.

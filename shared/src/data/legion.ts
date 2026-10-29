@@ -98,6 +98,9 @@ const SENDS: [string, number, number, Stats, number?][] = [
   ['archdemon', 1500, 70, ['Archdemon', 3000, 0, 'unarmored', 'chaos', [221, 257], 0.7, 350, 280, 75], 15],
 ];
 
+/** Prophet: one random fighter per tier from all other builders, rerollable a few times. */
+export const PROPHET = 'prophet';
+
 /** Chimera: six eggs (one per tier) that hatch into a random fighter of another builder. Costs follow the original. */
 const MORPH_COSTS: [gold: number, food: number][] = [[18, 1], [45, 1], [85, 1], [135, 1], [200, 2], [305, 2]];
 const MORPH_EGGS: UnitDef[] = MORPH_COSTS.map(([goldCost, food], i) => ({
@@ -137,7 +140,11 @@ function buildData(): GameData {
   }
   return {
     units,
-    builders: { ...BUILDERS, chimera: { id: 'chimera', name: 'Chimera', fighters: MORPH_EGGS.map((e) => e.id) } },
+    builders: {
+      ...BUILDERS,
+      chimera: { id: 'chimera', name: 'Chimera', fighters: MORPH_EGGS.map((e) => e.id) },
+      [PROPHET]: { id: PROPHET, name: 'Prophet', fighters: [], random: true },
+    },
     waves,
     mercs,
     damageTable: DAMAGE_TABLE,
@@ -170,6 +177,7 @@ function buildData(): GameData {
       arenaWaves: [10, 20],
       arenaGoldPerWave: 10,
       arenaMaxMs: 90_000,
+      prophet: { rerolls: 7, rerollCost: 40 },
       king: {
         unit: 'king',
         upgradeLumber: 80,

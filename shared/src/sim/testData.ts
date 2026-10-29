@@ -70,6 +70,7 @@ export function testData(overrides: Partial<GameData> = {}): GameData {
       arenaWaves: [],
       arenaGoldPerWave: 10,
       arenaMaxMs: 60000,
+      prophet: { rerolls: 2, rerollCost: 10 },
       king: {
         unit: 'king', upgradeLumber: 20, upgradeIncome: 3, hpBase: 425, hpStep: 25, hpMax: 2,
         attackStep: 10, attackMax: 30, regenStep: 5, regenMax: 20, buffEvery: 1, buffArmor: 2, buffAttackSpeed: 0.1,

@@ -7,6 +7,7 @@ import {
   MODE_IDS,
   ROOM_NAME,
   SERVER_PORT,
+  modeLocksBuilder,
   type JoinOptions,
   type LobbyMessages,
   type ModeId,
@@ -130,6 +131,8 @@ export class LobbyScene extends Phaser.Scene {
     const room = this.room;
     if (!room) return;
     const s = room.state as LobbyStateLike;
+    // Over a real network the first frames can run before the initial state has arrived.
+    if (!s?.players) return;
     if (s.status && s.status !== 'lobby') return this.enterGame(room);
     const slots = [...s.players];
     const me = slots.find((p) => p.sessionId === room.sessionId);
@@ -160,9 +163,10 @@ export class LobbyScene extends Phaser.Scene {
     if (me && !random) this.portrait.setTexture(facesetKey(builderPortrait(LEGION_DATA.builders[me.builder] ?? { id: '', fighters: [] })));
     this.builderName.setText(random ? 'RANDOM' : (LEGION_DATA.builders[me?.builder ?? '']?.name ?? '').toUpperCase());
     const offer = [...(me?.offer ?? [])].map((b) => LEGION_DATA.builders[b]?.name.toUpperCase());
-    this.builderNote.setText(random ? 'ROLLED WHEN THE GAME STARTS' : mode === 'sd' ? `DRAFT: ${offer.join(' / ')}` : 'ANY BUILDER');
-    this.buttons.builderPrev.setVisible(!random);
-    this.buttons.builderNext.setVisible(!random);
+    const note = random ? 'ROLLED WHEN THE GAME STARTS' : mode === 'apr' ? 'EVERYONE IS A PROPHET' : mode === 'sd' ? `DRAFT: ${offer.join(' / ')}` : 'ANY BUILDER';
+    this.builderNote.setText(note);
+    this.buttons.builderPrev.setVisible(!modeLocksBuilder(mode));
+    this.buttons.builderNext.setVisible(!modeLocksBuilder(mode));
 
     this.buttons.ready.setActive(!!me?.ready).setVisible(!host);
     for (const key of ['botW', 'botE', 'start'] as const) this.buttons[key].setVisible(host);
@@ -171,7 +175,8 @@ export class LobbyScene extends Phaser.Scene {
 
   private async connect(): Promise<void> {
     const options: JoinOptions = { name: this.entry.name, fast: new URLSearchParams(location.search).has('fast') };
-    const client = new Client(`${location.protocol}//${location.hostname}:${SERVER_PORT}`);
+    // Dev: Vite and the game server run on separate ports; hosted, the server also serves the page.
+    const client = new Client(import.meta.env.DEV ? `${location.protocol}//${location.hostname}:${SERVER_PORT}` : location.origin);
     try {
       this.room = this.entry.join ? await client.joinById(this.entry.join, options) : await client.create(ROOM_NAME, options);
     } catch (e) {
@@ -199,7 +204,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private mySlot(): SlotLike | undefined {
     const room = this.room;
-    return room ? [...(room.state as LobbyStateLike).players].find((p) => p.sessionId === room.sessionId) : undefined;
+    return room ? [...((room.state as LobbyStateLike | undefined)?.players ?? [])].find((p) => p.sessionId === room.sessionId) : undefined;
   }
 
   private cycleMode(step: number): void {

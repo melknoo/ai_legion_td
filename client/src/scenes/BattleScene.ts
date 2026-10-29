@@ -1,17 +1,16 @@
 import Phaser from 'phaser';
-import { ARENA, CELL, LANE, LEGION_DATA, STATUS, type AttackType, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
+import { ARENA, CELL, LANE, LEGION_DATA, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM, SCALE, UI_ZOOM, VIEW_W } from '../layout.ts';
 import { RANGED, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
 import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
-import type { HudView, SlotMode } from '../ui/Hud.ts';
-import { onKey } from '../ui/keys.ts';
+import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
+import { SLOT_KEYS, onKey } from '../ui/keys.ts';
 import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
 
-const NUMBER_KEYS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX'];
 const AURA_GLOW: Record<AuraStat, number> = { damage: 0xff6040, armor: 0x60a0ff, attackSpeed: 0xffe060, regen: 0x60ff90 };
 /** Visible battlefield size in field pixels at the camera zoom. */
 const VIEW_FIELD_W = CANVAS_W / FIELD_ZOOM;
@@ -133,7 +132,7 @@ export class BattleScene extends Phaser.Scene {
       player: this.me,
       views: this.viewList,
       actions: {
-        pickSlot: (i) => this.numberKey(i),
+        pickSlot: (i) => this.slotKey(i),
         setSlotMode: (mode) => this.setSlotMode(mode),
         nextSendPage: () => this.nextSendPage(),
         toggleTypeChart: () => this.ui.toggleTypeChart(),
@@ -227,9 +226,14 @@ export class BattleScene extends Phaser.Scene {
   private setupInput(): void {
     const kb = this.input.keyboard!;
     this.cursors = kb.createCursorKeys();
-    NUMBER_KEYS.forEach((key, i) => onKey(kb, `keydown-${key}`, () => this.numberKey(i)));
+    // Command card: QWER / ASDF / YXCV as labelled on a German keyboard; Z also works for QWERTY.
+    const slot = (i: number) => () => this.session.game.phase !== 'over' && this.slotKey(i);
+    SLOT_KEYS.forEach((key, i) => onKey(kb, `keydown-${key}`, slot(i)));
+    onKey(kb, 'keydown-Z', slot(SLOT_KEYS.indexOf('Y')));
     onKey(kb, 'keydown-N', () => this.nextSendPage());
-    onKey(kb, 'keydown-Q', () => this.setSlotMode(this.slotMode === 'build' ? 'send' : 'build'));
+    onKey(kb, 'keydown-ONE', () => this.setSlotMode('build'));
+    // A second press on 2 turns the send page.
+    onKey(kb, 'keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
     onKey(kb, 'keydown-T', () => this.ui.toggleTypeChart());
     onKey(kb, 'keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
@@ -248,12 +252,13 @@ export class BattleScene extends Phaser.Scene {
       }
     });
     onKey(kb, 'keydown-U', () => this.upgradeSelected());
-    onKey(kb, 'keydown-S', () => this.sellSelected());
+    onKey(kb, 'keydown-DELETE', () => this.sellSelected());
+    onKey(kb, 'keydown-BACKSPACE', () => this.sellSelected());
     onKey(kb, 'keydown-B', () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'));
     onKey(kb, 'keydown-H', () => this.upgradeKing('hp'));
     onKey(kb, 'keydown-J', () => this.upgradeKing('attack'));
     onKey(kb, 'keydown-K', () => this.upgradeKing('regen'));
-    onKey(kb, 'keydown-F', () => this.upgradeFarm());
+    onKey(kb, 'keydown-G', () => this.upgradeFarm());
 
     this.input.mouse?.disableContextMenu();
     this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
@@ -276,7 +281,7 @@ export class BattleScene extends Phaser.Scene {
         this.selectedUnit = own.id;
         return;
       }
-      const unit = this.selectedBuild !== null ? this.builder().fighters[this.selectedBuild] : undefined;
+      const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
       if (cell && unit) {
         const result = this.session.send({ type: 'build', unit, col: cell.col, row: cell.row });
         this.feedback(result);
@@ -307,12 +312,15 @@ export class BattleScene extends Phaser.Scene {
     this.selectedBuild = null;
   }
 
-  /** 1-6 arms a fighter for placement or sends a merc, depending on the slot mode. */
-  private numberKey(i: number): void {
+  /** A command card slot arms a fighter for placement or sends a merc, depending on the slot mode. */
+  private slotKey(i: number): void {
     if (this.mode === 'send') {
-      const merc = this.sends()[this.sendPage * 6 + i];
+      const merc = this.sends()[this.sendPage * SEND_PAGE_SIZE + i];
       if (merc) this.feedback(this.session.send({ type: 'sendMerc', merc: merc.id }), `${merc.name.toUpperCase()} SENT!`);
-    } else if (i < this.builder().fighters.length) {
+    } else if (i === REROLL_SLOT && this.isProphet()) {
+      this.selectedBuild = null;
+      this.feedback(this.session.send({ type: 'reroll' }), 'NEW FIGHTERS!');
+    } else if (i < this.fighters().length) {
       this.selectedBuild = this.selectedBuild === i ? null : i;
       this.selectedUnit = null;
       if (this.viewArea !== this.me) this.setView(this.me);
@@ -325,7 +333,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private nextSendPage(): void {
-    this.sendPage = (this.sendPage + 1) % Math.ceil(this.sends().length / 6);
+    this.sendPage = (this.sendPage + 1) % Math.ceil(this.sends().length / SEND_PAGE_SIZE);
   }
 
   private upgradeFarm(): void {
@@ -388,9 +396,13 @@ export class BattleScene extends Phaser.Scene {
     return best;
   }
 
-  private builder() {
+  private fighters(): string[] {
+    return this.session.game.players[this.me]!.fighters;
+  }
+
+  private isProphet(): boolean {
     const g = this.session.game;
-    return g.data.builders[g.players[this.me]!.builder]!;
+    return !!g.data.builders[g.players[this.me]!.builder]?.random;
   }
 
   private setView(area: number): void {
@@ -738,7 +750,7 @@ export class BattleScene extends Phaser.Scene {
     if (sel?.cell && sel.area === this.viewArea) g.lineStyle(1, 0xfff060, 1).strokeRect(x0 + sel.cell.col * cs, sel.cell.row * cs, cs, cs);
     if (!own || !this.hoverCell) return;
     const { col, row } = this.hoverCell;
-    const unit = this.selectedBuild !== null ? this.builder().fighters[this.selectedBuild] : undefined;
+    const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
     if (!unit) {
       if (this.fighterAt(col, row)) g.fillStyle(0xffffff, 0.2).fillRect(x0 + col * cs, row * cs, cs, cs);
       return;
@@ -758,15 +770,15 @@ export class BattleScene extends Phaser.Scene {
   }
 }
 
-/** Dev deep link: `?builder=grove&size=2&mode=ar` starts a solo game directly. */
+/** Dev deep link: `?builder=grove&size=2&mode=ar` (ap, ar, sd, apr) starts a solo game directly. */
 function soloFromUrl(): SoloConfig {
   const params = new URLSearchParams(location.search);
   const builders = Object.keys(LEGION_DATA.builders);
   const wanted = params.get('builder');
-  const mode = params.get('mode');
+  const mode = params.get('mode') as ModeId;
   return {
     builder: wanted && builders.includes(wanted) ? wanted : builders[0]!,
     teamSize: Math.min(4, Math.max(1, Number(params.get('size')) || 1)),
-    mode: mode === 'ar' || mode === 'sd' ? mode : 'ap',
+    mode: MODE_IDS.includes(mode) ? mode : 'ap',
   };
 }

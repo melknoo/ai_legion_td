@@ -141,5 +141,7 @@ Rüstungsformel: WC3-Standard, Faktor 0,06. Der King (Rüstungstyp „Hero“) n
 - **Umgesetzt:** alle Builder (umbenannt), Wellen 1–30 plus Finale, Wisps/Holz, Sends aller Stufen (auch in der Build-Phase), King-Upgrades und -Fähigkeiten, Leaks, Arena, Food/Farmen, Fähigkeiten (12 Effekt-Bausteine, Werte angenähert).
 - **Chimera (Hybrid):** sechs Eier (Tier 1–6, Originalpreise), jedes schlüpft beim Bauen zu einem zufälligen Kämpfer gleicher Stufe eines anderen Builders.
 - **Bosse (Welle 10/20/30):** Stuns und Slows halten nur ¼ so lang („reduced greatly on bosses“). Torrent (W20) und Shockwave (W30, 100 Schaden wie im Original) als Nova.
-- **Später:** Prophet, Leak-Bounty-Faktor, Teamgrößen-Ausgleich. Der Builder „Pharaoh“ ist im Original unfertig (4 Einheiten ohne Fähigkeiten) und fehlt bewusst.
+- **Prophet:** baut aus allen Rassen, bekommt aber pro Spieler je Tier T1–T6 einen zufälligen Basis-Kämpfer (wie im Original 3.47). Bis zu 7 Rerolls des ganzen Rosters; der n-te kostet n × 40 Gold und Holz (Original n × 50). In AP wählbar, nicht in AR/SD.
+- **Modi:** All Pick, All Random, Single Draft und All Prophet (alle spielen Prophet; Original `-ph`). „Prophet Randomize“ (jede Runde neue Türme) fehlt noch.
+- **Später:** Leak-Bounty-Faktor, Teamgrößen-Ausgleich. Der Builder „Pharaoh“ ist im Original unfertig (4 Einheiten ohne Fähigkeiten) und fehlt bewusst.
 - **Bewusst ignoriert:** Die 3.44-Map von Epicwar enthält eingeschleusten Cheat-Code (`hke_*`, `SaiYaren`/`Tuan_kaiQi`). Der ist nicht Teil des Spiels.
