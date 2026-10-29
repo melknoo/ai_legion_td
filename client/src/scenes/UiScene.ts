@@ -3,6 +3,7 @@ import type { GameView } from '@legion/shared';
 import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
+import { Tutorial } from '../ui/Tutorial.ts';
 import { typeChart } from '../ui/typeChart.ts';
 import { FONT } from './BootScene.ts';
 
@@ -21,6 +22,7 @@ export interface UiLink {
  */
 export class UiScene extends Phaser.Scene {
   private hud!: Hud;
+  private tutorial!: Tutorial;
   private link!: UiLink;
   private fieldLabel!: Phaser.GameObjects.BitmapText;
   private message: Phaser.GameObjects.Container | null = null;
@@ -35,12 +37,14 @@ export class UiScene extends Phaser.Scene {
     this.link = link;
     this.chart = null;
     this.hud = new Hud(this, link.game, link.player, link.views, link.actions);
+    this.tutorial = new Tutorial(this, link.game);
     this.fieldLabel = this.add.bitmapText(6, FIELD_TOP + 3, FONT, '');
     this.showBanner(['BUILD PHASE']);
   }
 
   override update(): void {
     this.hud.update(this.link.state());
+    this.tutorial.update();
   }
 
   setFieldLabel(text: string, color: number): void {

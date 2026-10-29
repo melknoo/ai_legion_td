@@ -6,6 +6,7 @@ import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
+import { setTipsEnabled, tipsEnabled } from '../ui/Tutorial.ts';
 import { onKey } from '../ui/keys.ts';
 import { FONT } from './BootScene.ts';
 
@@ -109,8 +110,9 @@ export class TitleScene extends Phaser.Scene {
         { label: () => 'CREATE ONLINE GAME', action: () => this.scene.start('lobby', { create: true, name: this.name }) },
         { label: () => 'JOIN ONLINE GAME', action: () => this.show('join') },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
+        { label: () => `TIPS: ${tipsEnabled() ? 'ON' : 'OFF'}`, action: () => setTipsEnabled(!tipsEnabled()) },
       ];
-      this.window(150, 158, 180, 66);
+      this.window(150, 152, 180, 80);
     } else if (panel === 'solo') {
       this.items = [
         { label: () => `MODE      < ${MODES[this.solo.mode].name} >`, change: (s) => this.cycleMode(s), action: () => this.cycleMode(1) },
