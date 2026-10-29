@@ -1,0 +1,18 @@
+{
+  "builders": { "u016": { "id": "corsair", "name": "Corsair" } },
+  "fighters": {
+    "h0EA": { "name": "Magma Bosun", "sprite": "Flam" },
+    "h0EG": { "name": "Pyre Commodore", "sprite": "m:Flam2" },
+    "h0AZ": { "name": "Inkspitter", "sprite": "m:Octopus" },
+    "h0DC": { "name": "Tide Horror", "sprite": "m:RedOctopus" },
+    "h0DF": { "name": "Rum Swabbie", "sprite": "FighterRed" },
+    "h0EF": { "name": "Cutlass Rogue", "sprite": "FighterRed", "hue": 200 },
+    "h0A5": { "name": "Powder Gunner", "sprite": "NinjaBomb" },
+    "h0DE": { "name": "Scorch Gunner", "sprite": "NinjaBomb", "hue": 330 },
+    "h09A": { "name": "Bilgehand", "sprite": "Villager5" },
+    "h09C": { "name": "Drowned Mate", "sprite": "Skeleton", "hue": 160 },
+    "h09J": { "name": "Pistoleer", "sprite": "Villager5", "hue": 140 },
+    "h096": { "name": "Squawkbeak", "sprite": "m:Owl", "hue": 100 },
+    "h098": { "name": "Featherjack", "sprite": "Tengu" }
+  }
+}

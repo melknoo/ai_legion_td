@@ -1,0 +1,19 @@
+{
+  "name": "@legion/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "0.18.5",
+    "@legion/shared": "*",
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}

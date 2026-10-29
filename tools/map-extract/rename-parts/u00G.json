@@ -1,0 +1,19 @@
+{
+  "builders": { "u00G": { "id": "spectral", "name": "Spectral" } },
+  "fighters": {
+    "h05N": { "name": "Pale Wisp", "sprite": "m:Spirit" },
+    "h05O": { "name": "Hollow Shade", "sprite": "m:Spirit", "hue": 120 },
+    "h05P": { "name": "Quicksilver", "sprite": "Spirit", "hue": 200 },
+    "h05S": { "name": "Lost Pilgrim", "sprite": "Inspector" },
+    "h062": { "name": "Valor Shade", "sprite": "Inspector", "hue": 200 },
+    "h05T": { "name": "Spite Shade", "sprite": "Inspector", "hue": 300 },
+    "h05R": { "name": "Dirge Lantern", "sprite": "m:LanternGreen" },
+    "h05U": { "name": "Banelantern", "sprite": "m:LanternRed" },
+    "h05V": { "name": "Grim Exile", "sprite": "RedGladiator", "hue": 160 },
+    "h05W": { "name": "Forsworn", "sprite": "RedGladiator", "hue": 220 },
+    "h05X": { "name": "Sorrowmist", "sprite": "Princess", "hue": 180 },
+    "h05Y": { "name": "Lament Queen", "sprite": "Princess", "hue": 260 },
+    "h05Z": { "name": "Soulbinder", "sprite": "Tengu" },
+    "h060": { "name": "Eventide", "sprite": "Tengu", "hue": 200 }
+  }
+}

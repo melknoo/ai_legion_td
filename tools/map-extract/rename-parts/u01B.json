@@ -1,0 +1,16 @@
+{
+  "builders": { "u01B": { "id": "forge", "name": "Forge" } },
+  "fighters": {
+    "h0B3": { "name": "Mine Nibbler", "sprite": "m:Mouse" },
+    "h0B4": { "name": "Anvilguard", "sprite": "OldMan2" },
+    "h0B5": { "name": "Clan Reaver", "sprite": "OldMan2", "hue": 200 },
+    "h0B6": { "name": "Cragshot", "sprite": "Eskimo" },
+    "h0B7": { "name": "Highpeak Ace", "sprite": "NinjaEskimo" },
+    "h0B8": { "name": "Bolt Tinker", "sprite": "OldMan" },
+    "h0B9": { "name": "Hearthsmith", "sprite": "OldMan", "hue": 30 },
+    "h0BA": { "name": "Stone Ascetic", "sprite": "Master" },
+    "h0BB": { "name": "Ironrage", "sprite": "Master", "hue": 200 },
+    "h0BQ": { "name": "Thunder Thane", "sprite": "Sultan" },
+    "h0D8": { "name": "Tempest Thane", "sprite": "Sultan2" }
+  }
+}

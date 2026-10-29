@@ -1,0 +1,21 @@
+{
+  "name": "@legion/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@colyseus/schema": "5.0.42",
+    "@colyseus/ws-transport": "0.18.4",
+    "@legion/shared": "*",
+    "colyseus": "0.18.9"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "tsx": "4.23.15"
+  }
+}

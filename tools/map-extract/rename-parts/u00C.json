@@ -1,0 +1,17 @@
+{
+  "builders": { "u00C": { "id": "primal", "name": "Primal" } },
+  "fighters": {
+    "h040": { "name": "Sparkmote", "sprite": "m:Spirit2" },
+    "h041": { "name": "Surgemote", "sprite": "m:Spirit2", "hue": 200 },
+    "h042": { "name": "Tidewisp", "sprite": "m:Slime3" },
+    "h043": { "name": "Deepswell", "sprite": "m:Octopus2" },
+    "h044": { "name": "Breezeling", "sprite": "m:Flam2" },
+    "h045": { "name": "Windshear", "sprite": "m:Flam2", "hue": 270 },
+    "h046": { "name": "Claybrute", "sprite": "m:Mole" },
+    "h047": { "name": "Boulderback", "sprite": "m:Mole2" },
+    "h048": { "name": "Runesage", "sprite": "OldMan3" },
+    "h049": { "name": "Astral Sage", "sprite": "Master" },
+    "h04A": { "name": "Cinder Sibyl", "sprite": "Flam", "hue": 260 },
+    "h04B": { "name": "Ashborn Roc", "sprite": "Flam" }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "builders": { "u01D": { "id": "canopy", "name": "Canopy" } },
+  "fighters": {
+    "h0EV": { "name": "Coilstrike", "sprite": "m:Snake3" },
+    "h0F6": { "name": "Tidecoil", "sprite": "m:Snake4" },
+    "h0EU": { "name": "Bramble Patch", "sprite": "m:HeartGreen" },
+    "h0F0": { "name": "Stranglevine", "sprite": "m:HeartRed" },
+    "h0EW": { "name": "Fruitflinger", "sprite": "Monkey" },
+    "h0F9": { "name": "Ironback Ape", "sprite": "MonkeyBoxerRed" },
+    "h0EX": { "name": "Leechmite", "sprite": "m:SpiderRed" },
+    "h0FC": { "name": "Carapax", "sprite": "m:SpiderYellow" },
+    "h0EY": { "name": "Waspcaller", "sprite": "MaskRacoon" },
+    "h0FE": { "name": "Thorn Oracle", "sprite": "MaskGoldRacoon" },
+    "h0EZ": { "name": "Shadepelt", "sprite": "m:Beast2" },
+    "h0FI": { "name": "Blazestripe", "sprite": "m:Beast" }
+  }
+}

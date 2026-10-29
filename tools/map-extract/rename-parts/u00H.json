@@ -1,0 +1,18 @@
+{
+  "builders": { "u00H": { "id": "wildfolk", "name": "Wildfolk" } },
+  "fighters": {
+    "h06J": { "name": "Scrap Tinker", "sprite": "GreenPig" },
+    "h078": { "name": "Mortarsmith", "sprite": "NinjaBomb" },
+    "h06I": { "name": "Mutagen Brute", "sprite": "m:Cyclope2" },
+    "h06K": { "name": "Pit Fighter", "sprite": "FighterRed", "hue": 120 },
+    "h06L": { "name": "Pitboss", "sprite": "FighterRed" },
+    "h06M": { "name": "Netcaster", "sprite": "Cavegirl" },
+    "h06N": { "name": "Snarechief", "sprite": "Cavegirl2" },
+    "h06O": { "name": "Rootmender", "sprite": "MaskRacoon" },
+    "h06P": { "name": "Totem Elder", "sprite": "MaskGoldRacoon" },
+    "h06Q": { "name": "Veil Dancer", "sprite": "Woman" },
+    "h06R": { "name": "Enthraller", "sprite": "Woman", "hue": 300 },
+    "h06S": { "name": "Stamphorn", "sprite": "m:Reptile" },
+    "h06T": { "name": "Quakehide", "sprite": "m:Reptile2" }
+  }
+}

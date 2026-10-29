@@ -1,0 +1,17 @@
+{
+  "builders": { "u00K": { "id": "frost", "name": "Frost" } },
+  "fighters": {
+    "h0BC": { "name": "Icefisher", "sprite": "Eskimo", "hue": 190 },
+    "h0BD": { "name": "Floe Harpooner", "sprite": "NinjaEskimo", "hue": 190 },
+    "h0BE": { "name": "Rime Hound", "sprite": "m:Racoon", "hue": 180 },
+    "h0BG": { "name": "Snowpaw", "sprite": "m:Panda" },
+    "h0BH": { "name": "Chillcaster", "sprite": "OldMan", "hue": 180 },
+    "h0BI": { "name": "Rimeseer", "sprite": "OldMan2", "hue": 180 },
+    "h0BJ": { "name": "Icepelt", "sprite": "m:Bear", "hue": 180 },
+    "h0BK": { "name": "Hailhorn", "sprite": "m:Bear", "hue": 210 },
+    "h0BM": { "name": "Snowstalker", "sprite": "m:Cyclope", "hue": 180 },
+    "h0BL": { "name": "Blizzard Fiend", "sprite": "m:Cyclope", "hue": 220 },
+    "h0BO": { "name": "Icewing Whelp", "sprite": "m:Dragon", "hue": 190 },
+    "h0BP": { "name": "Sleetwing", "sprite": "m:Dragon", "hue": 220 }
+  }
+}

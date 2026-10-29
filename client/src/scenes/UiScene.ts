@@ -1,0 +1,82 @@
+import Phaser from 'phaser';
+import type { GameView } from '@legion/shared';
+import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
+import { ff6Window } from '../ui/ff6Window.ts';
+import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
+import { typeChart } from '../ui/typeChart.ts';
+import { FONT } from './BootScene.ts';
+
+/** What the battlefield scene hands to the HUD. */
+export interface UiLink {
+  game: GameView;
+  player: number;
+  views: HudView[];
+  actions: HudActions;
+  state(): HudState;
+}
+
+/**
+ * Screen-space overlay above the zoomed battlefield: HUD panels, field label,
+ * message windows and feedback text. Runs in parallel with BattleScene.
+ */
+export class UiScene extends Phaser.Scene {
+  private hud!: Hud;
+  private link!: UiLink;
+  private fieldLabel!: Phaser.GameObjects.BitmapText;
+  private message: Phaser.GameObjects.Container | null = null;
+  private chart: Phaser.GameObjects.Container | null = null;
+
+  constructor() {
+    super('ui');
+  }
+
+  create(link: UiLink): void {
+    layoutCamera(this);
+    this.link = link;
+    this.chart = null;
+    this.hud = new Hud(this, link.game, link.player, link.views, link.actions);
+    this.fieldLabel = this.add.bitmapText(6, FIELD_TOP + 3, FONT, '');
+    this.showBanner(['BUILD PHASE']);
+  }
+
+  override update(): void {
+    this.hud.update(this.link.state());
+  }
+
+  setFieldLabel(text: string, color: number): void {
+    this.fieldLabel?.setText(text).setTint(color);
+  }
+
+  /** FF6 message window over the battlefield; `holdMs` = 0 keeps it open. */
+  showBanner(lines: string[], holdMs = 1300): void {
+    this.message?.destroy();
+    const w = Math.max(...lines.map((l) => l.length)) * 8 + 32;
+    const h = lines.length * 11 + 13;
+    const box = ff6Window(this, -w / 2, -h / 2, w, h);
+    const label = this.add.bitmapText(0, 1, FONT, lines.join('\n')).setOrigin(0.5).setCenterAlign().setLineSpacing(3);
+    const c = this.add.container(VIEW_W / 2, FIELD_TOP + 60, [box, label]).setDepth(20000).setScale(1, 0);
+    this.message = c;
+    this.tweens.add({ targets: c, scaleY: 1, duration: 120, ease: 'Back.easeOut' });
+    if (holdMs) this.tweens.add({ targets: c, alpha: 0, delay: holdMs, duration: 300, onComplete: () => c.destroy() });
+  }
+
+  /** Short feedback line rising over the battlefield. */
+  get typeChartOpen(): boolean {
+    return this.chart !== null;
+  }
+
+  /** Attack-vs-armor table over the battlefield (T or the "?" button). */
+  toggleTypeChart(): void {
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+      return;
+    }
+    this.chart = typeChart(this, this.link.game, this.link.player, VIEW_W / 2, FIELD_TOP + FIELD_H / 2);
+  }
+
+  floatText(text: string, color: number, x = VIEW_W / 2, y = FIELD_TOP + 40): void {
+    const t = this.add.bitmapText(x, y, FONT, text).setOrigin(0.5).setTint(color).setDepth(10002);
+    this.tweens.add({ targets: t, y: y - 12, alpha: 0, duration: 900, ease: 'Quad.easeIn', onComplete: () => t.destroy() });
+  }
+}

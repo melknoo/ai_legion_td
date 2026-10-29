@@ -1,0 +1,19 @@
+{
+  "builders": { "u002": { "id": "umbral", "name": "Umbral" } },
+  "fighters": {
+    "h01P": { "name": "Duskling", "sprite": "NinjaDark" },
+    "h01Q": { "name": "Duskblade", "sprite": "NinjaDark", "hue": 300 },
+    "h01R": { "name": "Emberbow", "sprite": "RedNinja3" },
+    "h01S": { "name": "Gloomcaster", "sprite": "NinjaMageOrange", "hue": 240 },
+    "h01T": { "name": "Bile Spitter", "sprite": "m:SpiderYellow" },
+    "h01U": { "name": "Webstalker", "sprite": "m:SpiderRed" },
+    "h01V": { "name": "Rift Sentry", "sprite": "Tengu2" },
+    "h01W": { "name": "Rift Herald", "sprite": "Tengu2", "hue": 300 },
+    "h01X": { "name": "Dread Eye", "sprite": "m:Eye", "hue": 240 },
+    "h01Y": { "name": "Soulgazer", "sprite": "m:Eye2", "hue": 280 },
+    "h01Z": { "name": "Gloomstalker", "sprite": "NinjaMasked" },
+    "h020": { "name": "Mirrorshade", "sprite": "NinjaMasked", "hue": 180 },
+    "h021": { "name": "Netherlord", "sprite": "Noble" },
+    "h022": { "name": "Underking", "sprite": "Noble", "hue": 280 }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "builders": { "u00U": { "id": "warclan", "name": "Warclan" } },
+  "fighters": {
+    "h0BF": { "name": "Skullcub", "sprite": "CaveLion", "hue": 330 },
+    "h0BS": { "name": "Bloodfang", "sprite": "CaveLion2", "hue": 330 },
+    "h0BU": { "name": "Ripclaw", "sprite": "Lion" },
+    "h0BV": { "name": "Ashcaller", "sprite": "SorcererOrange" },
+    "h0BW": { "name": "Cinderhex", "sprite": "SorcererOrange", "hue": 330 },
+    "h0BX": { "name": "Packrunner", "sprite": "CamouflageRed" },
+    "h0C0": { "name": "Packlord", "sprite": "RedGladiator" },
+    "h0C4": { "name": "Mojo Mender", "sprite": "Sultan", "hue": 300 },
+    "h0C2": { "name": "Totemwise", "sprite": "Sultan2", "hue": 300 },
+    "h0C5": { "name": "Talonflyer", "sprite": "m:DragonYellow", "hue": 330 },
+    "h0C8": { "name": "Venomwing", "sprite": "m:DragonYellow", "hue": 100 },
+    "h0C9": { "name": "Skullsplitter", "sprite": "LionYellow" },
+    "h0CC": { "name": "Ashstorm Khan", "sprite": "LionYellow", "hue": 330 }
+  }
+}

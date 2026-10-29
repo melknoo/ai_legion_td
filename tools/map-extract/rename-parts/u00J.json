@@ -1,0 +1,19 @@
+{
+  "builders": { "u00J": { "id": "tidal", "name": "Tidal" } },
+  "fighters": {
+    "h07J": { "name": "Reefling", "sprite": "m:Axolot" },
+    "h07L": { "name": "Mudskipper", "sprite": "m:Lizard" },
+    "h07N": { "name": "Gnashjaw", "sprite": "m:Lizard2" },
+    "h07M": { "name": "Venomgill", "sprite": "m:Lizard", "hue": 100 },
+    "h07O": { "name": "Spawnpod", "sprite": "m:Mollusc" },
+    "h07P": { "name": "Mistcoil", "sprite": "m:Snake3", "hue": 180 },
+    "h07Q": { "name": "Silt Gulper", "sprite": "m:Fish" },
+    "h07R": { "name": "Deepmaw", "sprite": "m:FishRed" },
+    "h07S": { "name": "Wavesinger", "sprite": "Princess", "hue": 170 },
+    "h07T": { "name": "Coral Queen", "sprite": "Princess", "hue": 320 },
+    "h07U": { "name": "Shoal Lurker", "sprite": "m:KappaGreen" },
+    "h07V": { "name": "Wavebreaker", "sprite": "m:KappaRed" },
+    "h07W": { "name": "Gloomtide", "sprite": "m:Octopus", "hue": 200 },
+    "h07X": { "name": "Kelp Horror", "sprite": "m:GreenOctopus" }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "builders": { "u001": { "id": "feral", "name": "Feral" } },
+  "fighters": {
+    "h010": { "name": "Jackalkin", "sprite": "LionBoy" },
+    "h011": { "name": "Jackal Venomer", "sprite": "LionOrange" },
+    "h012": { "name": "Tusk Basher", "sprite": "m:Beast" },
+    "h013": { "name": "Tusk Crusher", "sprite": "m:Beast2" },
+    "h014": { "name": "Barbwing", "sprite": "m:YellowsBat" },
+    "h015": { "name": "Venom Matron", "sprite": "m:BlueBat", "hue": 280 },
+    "h016": { "name": "Junglespear", "sprite": "CaveLion" },
+    "h017": { "name": "Junglechief", "sprite": "CaveLion2" },
+    "h018": { "name": "Rockpaw", "sprite": "m:Bear" },
+    "h019": { "name": "Thunderpelt", "sprite": "m:Bear", "hue": 200 },
+    "h01A": { "name": "Scaleborn", "sprite": "m:TRex" },
+    "h01B": { "name": "Blazewyrm", "sprite": "m:TRex", "hue": 190 }
+  }
+}

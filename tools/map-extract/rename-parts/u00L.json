@@ -1,0 +1,22 @@
+{
+  "builders": { "u00L": { "id": "sylvan", "name": "Sylvan" } },
+  "fighters": {
+    "h08F": { "name": "Fawnling", "sprite": "Boy", "hue": 90 },
+    "h08I": { "name": "Glade Outrider", "sprite": "NinjaGreen" },
+    "h08H": { "name": "Thornsquire", "sprite": "SamuraiRed", "hue": 110 },
+    "h08L": { "name": "Briarknight", "sprite": "Samurai", "hue": 110 },
+    "h08N": { "name": "Gladewatch", "sprite": "NinjaBlue" },
+    "h08P": { "name": "Glaivedancer", "sprite": "NinjaBlue2" },
+    "h08Q": { "name": "Chained Exile", "sprite": "Woman", "hue": 100 },
+    "h08S": { "name": "Twinfeint", "sprite": "Woman", "hue": 270 },
+    "h08V": { "name": "Oakseer", "sprite": "Master", "hue": 90 },
+    "h08Y": { "name": "Celestine", "sprite": "Master", "hue": 230 },
+    "h08Z": { "name": "Elementarch", "sprite": "NinjaMasked", "hue": 90 },
+    "h0DG": { "name": "Galeweaver", "sprite": "NinjaGray" },
+    "h0DH": { "name": "Rainweaver", "sprite": "NinjaWater" },
+    "h0DJ": { "name": "Emberweaver", "sprite": "NinjaRed" },
+    "h0DI": { "name": "Stoneweaver", "sprite": "NinjaYellow" },
+    "h090": { "name": "Moonblade", "sprite": "NinjaRed2", "hue": 260 },
+    "h093": { "name": "Shadowmoon", "sprite": "NinjaRed2", "hue": 290 }
+  }
+}

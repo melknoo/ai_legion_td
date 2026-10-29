@@ -1,0 +1,16 @@
+{
+  "builders": { "u014": { "id": "abyss", "name": "Abyss" } },
+  "fighters": {
+    "h0DX": { "name": "Mawgrub", "sprite": "m:Larva", "hue": 260 },
+    "h0DW": { "name": "Blightwood", "sprite": "m:BambooYellow", "hue": 220 },
+    "h0DU": { "name": "Gnarlrot", "sprite": "m:Bamboo", "hue": 220 },
+    "h0DZ": { "name": "Fleshmorph", "sprite": "m:Cyclope", "hue": 260 },
+    "h0DT": { "name": "Gristlemaw", "sprite": "m:Cyclope2", "hue": 260 },
+    "h0E2": { "name": "Gloomwing", "sprite": "m:BlueBat", "hue": 50 },
+    "h0E3": { "name": "Ruinwing", "sprite": "m:YellowsBat", "hue": 240 },
+    "h0DQ": { "name": "Hourthief", "sprite": "NinjaMasked" },
+    "h0DP": { "name": "Chronophage", "sprite": "NinjaMasked", "hue": 250 },
+    "h0E0": { "name": "Dusk Envoy", "sprite": "m:Spirit", "hue": 60 },
+    "h0E8": { "name": "Nullshade", "sprite": "m:Spirit2", "hue": 240 }
+  }
+}

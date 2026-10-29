@@ -1,0 +1,18 @@
+{
+  "builders": { "u00M": { "id": "tinker", "name": "Tinker" } },
+  "fighters": {
+    "h0A8": { "name": "Pop Mine", "sprite": "NinjaBomb", "hue": 30 },
+    "h0AT": { "name": "Blast Mine", "sprite": "NinjaBomb", "hue": 100 },
+    "h0AU": { "name": "Megablast Mine", "sprite": "NinjaBomb", "hue": 200 },
+    "h0AB": { "name": "Rivet Turret", "sprite": "RobotGrey", "hue": 30 },
+    "h0AA": { "name": "Gatling Bot", "sprite": "RobotCamouflage", "hue": 30 },
+    "h0AE": { "name": "Sprocket", "sprite": "Tengu", "hue": 90 },
+    "h0AF": { "name": "Junkplate", "sprite": "Tengu2", "hue": 90 },
+    "h0AH": { "name": "Whirlybird", "sprite": "m:ButterflyBlue" },
+    "h0AJ": { "name": "Rotorhawk", "sprite": "m:ButterflyBlue", "hue": 120 },
+    "h0AL": { "name": "Fizzbruiser", "sprite": "MonkeyBoxerRed", "hue": 60 },
+    "h0AO": { "name": "Turbobuster", "sprite": "MonkeyBoxerBlue" },
+    "h0AR": { "name": "Crankroller", "sprite": "m:Mole", "hue": 200 },
+    "h0AQ": { "name": "Smogtank", "sprite": "m:Mole2", "hue": 200 }
+  }
+}
