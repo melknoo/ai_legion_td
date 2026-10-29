@@ -39,6 +39,13 @@ Controls (everything also works with the mouse via the HUD):
 - `TAB` / view tabs: my lane, my king, foe lane, foe king; `R` restart after game over
 - The battlefield camera follows the fighting; pan with `←/→` or the mouse wheel. Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 3x
 
+Phones and tablets (landscape; `client/src/ui/touch.ts`):
+- tap a button to press it, hold it (~0.35 s) for its tooltip
+- tap a slot, then tap a free tile twice (first tap previews, second builds); the slot stays armed until tapped again or a tap lands off the grid
+- tap a unit to select it, empty ground to deselect; swipe the field to pan; the end screen has PLAY AGAIN / MENU buttons
+- name and room code use a hidden DOM input over the field, so the on-screen keyboard opens
+- installable as a PWA ("Add to home screen"): `client/public/manifest.webmanifest`, service worker `client/public/sw.js` (production builds only, one cache per build, solo games also start offline). Icons come from `node tools/make-icons.mjs`
+
 ## Hosting
 
 The server can serve the built client itself (`CLIENT_DIR`), so one process on one port runs page and game:

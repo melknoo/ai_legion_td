@@ -46,8 +46,55 @@ export function bodyMotion(scene: Phaser.Scene, r: Recoil, dir: number, ranged: 
   return lunge;
 }
 
+interface Swing {
+  x: number;
+  y: number;
+  reach: number;
+  from: number;
+  now: number;
+  dir: number;
+  alpha: number;
+}
+
+/**
+ * The crescents behind swung weapons, all drawn into one Graphics each frame. One Graphics
+ * per swing would be a separate draw (and blend switch) for every attacking fighter.
+ */
+export class SwingTrails {
+  private readonly g: Phaser.GameObjects.Graphics;
+  private readonly swings = new Set<Swing>();
+
+  constructor(scene: Phaser.Scene, depth: number) {
+    this.g = scene.add.graphics().setDepth(depth).setBlendMode(Phaser.BlendModes.ADD);
+  }
+
+  add(swing: Swing): Swing {
+    this.swings.add(swing);
+    return swing;
+  }
+
+  remove(swing: Swing): void {
+    this.swings.delete(swing);
+  }
+
+  draw(): void {
+    const g = this.g;
+    g.clear();
+    for (const s of this.swings) {
+      // Crescent swept by the weapon tip from `from` to `now` (sprite rotations; 0 points up).
+      const start = s.from - Math.PI / 2;
+      const end = s.now - Math.PI / 2;
+      const back = s.dir < 0;
+      g.lineStyle(3, 0xffffff, 0.5 * s.alpha).beginPath().arc(s.x, s.y, s.reach - 1, start, end, back).strokePath();
+      // A brighter edge on the last stretch, just behind the tip.
+      const edge = back ? Math.min(start, end + 1.2) : Math.max(start, end - 1.2);
+      g.lineStyle(1, 0xffffff, 0.9 * s.alpha).beginPath().arc(s.x, s.y, s.reach, edge, end, back).strokePath();
+    }
+  }
+}
+
 /** A weapon in the attacker's hand: swung for melee, raised and drawn for ranged. */
-export function weaponSwing(scene: Phaser.Scene, key: WeaponKey, x: number, y: number, dir: number, depth: number): void {
+export function weaponSwing(scene: Phaser.Scene, trails: SwingTrails, key: WeaponKey, x: number, y: number, dir: number, depth: number): void {
   const w = scene.add.image(Math.round(x + 5 * dir), Math.round(y - 7), `wpn-${key}`).setDepth(depth).setFlipX(dir < 0);
   if (key === 'bow') {
     // Bow stands upright with the arc facing the target; the "draw" squeezes it.
@@ -64,31 +111,18 @@ export function weaponSwing(scene: Phaser.Scene, key: WeaponKey, x: number, y: n
   const from = -0.9 * dir;
   const to = 1.9 * dir;
   w.setOrigin(0.5, 1).setRotation(from);
-  const trail = scene.add.graphics().setDepth(depth - 0.5).setBlendMode(Phaser.BlendModes.ADD);
-  const reach = w.displayHeight;
+  const trail = trails.add({ x: w.x, y: w.y, reach: w.displayHeight, from, now: from, dir, alpha: 1 });
   scene.tweens.add({
     targets: w,
     rotation: to,
     duration: 250,
     ease: 'Quad.easeIn',
-    onUpdate: () => swingTrail(trail, w.x, w.y, reach, from, w.rotation, dir),
+    onUpdate: () => (trail.now = w.rotation),
     onComplete: () => {
-      scene.tweens.add({ targets: trail, alpha: 0, duration: 160, onComplete: () => trail.destroy() });
+      scene.tweens.add({ targets: trail, alpha: 0, duration: 160, onComplete: () => trails.remove(trail) });
       scene.tweens.add({ targets: w, alpha: 0, delay: 120, duration: 100, onComplete: () => w.destroy() });
     },
   });
-}
-
-/** Crescent swept by the weapon tip from `from` to `now` (sprite rotations; 0 points up). */
-function swingTrail(g: Phaser.GameObjects.Graphics, x: number, y: number, reach: number, from: number, now: number, dir: number): void {
-  const start = from - Math.PI / 2;
-  const end = now - Math.PI / 2;
-  const back = dir < 0;
-  g.clear();
-  g.lineStyle(3, 0xffffff, 0.5).beginPath().arc(x, y, reach - 1, start, end, back).strokePath();
-  // A brighter edge on the last stretch, just behind the tip.
-  const edge = back ? Math.min(start, end + 1.2) : Math.max(start, end - 1.2);
-  g.lineStyle(1, 0xffffff, 0.9).beginPath().arc(x, y, reach, edge, end, back).strokePath();
 }
 
 /** Projectile flying from attacker to target; style follows the attack type. */

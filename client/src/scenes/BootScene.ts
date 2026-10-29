@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import {
   ARROW_PATH, DIR, FONT_PATH, FX, ICONS, KING_SPRITES, PROJECTILES, UNIT_SPRITES, WEAPONS,
-  bossPath, characterPath, facesetPath, monsterPath, spriteKey,
+  bossPath, characterPath, facesetPath, monsterPath, spriteBaseKey, spriteKey, spriteSheets,
 } from '../assets/manifest.ts';
+import { bakeHue } from '../render/hue.ts';
 import { makeGroundTextures } from '../render/groundTextures.ts';
 import { layoutCamera } from '../layout.ts';
 import { makePixelIcons } from '../ui/pixelIcons.ts';
@@ -27,7 +28,7 @@ export class BootScene extends Phaser.Scene {
     this.load.once('complete', () => bar.destroy());
 
     const sheet16 = { frameWidth: 16, frameHeight: 16 };
-    const sprites = new Map(Object.values(UNIT_SPRITES).map((s) => [spriteKey(s), s]));
+    const sprites = new Map(Object.values(UNIT_SPRITES).map((s) => [spriteBaseKey(s), s]));
     for (const [key, { folder, kind }] of sprites) {
       if (kind === 'character') {
         for (const anim of ['Walk', 'Idle', 'Attack', 'Dead'] as const) {
@@ -73,6 +74,10 @@ export class BootScene extends Phaser.Scene {
     );
     makePixelIcons(this);
     makeGroundTextures(this);
+    for (const spec of Object.values(UNIT_SPRITES)) {
+      if (!spec.hue) continue;
+      for (const sheet of spriteSheets(spec)) bakeHue(this.textures, `${spriteBaseKey(spec)}-${sheet}`, `${spriteKey(spec)}-${sheet}`, spec.hue);
+    }
     this.createAnimations();
     // Deep links: `?room=CODE` / `?online` open the lobby, `?builder=...` a solo game; otherwise the title.
     const params = new URLSearchParams(location.search);

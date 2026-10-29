@@ -2,12 +2,14 @@ import Phaser from 'phaser';
 import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM, SCALE, UI_ZOOM, VIEW_W } from '../layout.ts';
-import { bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
+import { ellipseTexture } from '../render/ellipse.ts';
+import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
 import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
 import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
+import { TOUCH } from '../ui/touch.ts';
 import { playerColor } from '../ui/playerColors.ts';
 import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
@@ -22,6 +24,8 @@ const FIELD_MARGIN = 32;
 const HEADROOM = 3;
 /** Camera pan speed for arrow keys, field px per second. */
 const PAN_SPEED = 220;
+/** A touch that moves this far (canvas px) is a swipe that pans, not a tap. */
+const TOUCH_PAN_PX = 16;
 /** Nova effects by ability name, else by the caster's attack type. */
 const NOVA_FX: Record<string, FxKey> = { Torrent: 'waterpillar', Shockwave: 'rockspike', 'Royal Stomp': 'rockspike', 'Plague Cloud': 'magic' };
 const GLOW_FX = new Set<FxKey>(['explosion', 'spark', 'magic', 'boost', 'thunder', 'cut']);
@@ -31,8 +35,7 @@ const NOVA_FX_BY_TYPE: Record<AttackType, FxKey> = { normal: 'rockspike', pierce
 
 interface UnitView {
   sprite: Phaser.GameObjects.Sprite;
-  shadow: Phaser.GameObjects.Ellipse;
-  hp: Phaser.GameObjects.Graphics;
+  shadow: Phaser.GameObjects.Image;
   lastX: number;
   /** Smoothed horizontal speed (px per frame); crowd jostling stays below the walk threshold. */
   speed: number;
@@ -46,9 +49,9 @@ interface UnitView {
   /** Unit definition the view was built for (upgrades rebuild it). */
   def: string;
   /** Pulsing aura ring for aura carriers. */
-  ring?: Phaser.GameObjects.Ellipse;
+  ring?: Phaser.GameObjects.Image;
   /** Ring in the owner's colour under fighters and sends. */
-  ownerRing?: Phaser.GameObjects.Ellipse;
+  ownerRing?: Phaser.GameObjects.Image;
 }
 
 /**
@@ -76,6 +79,8 @@ export class BattleScene extends Phaser.Scene {
   private selectedUnit: number | null = null;
   private hoverUnit: number | null = null;
   private hoverCell: { col: number; row: number } | null = null;
+  /** Touch on the battlefield until release; `panned` once it moved far enough to be a swipe. */
+  private touchStart: { x: number; y: number; panned: boolean } | null = null;
   private leaksAtWaveStart: number[] = [];
   private lastPhase: string = 'build';
   /** Camera centre (field px) and until when manual panning overrides the auto camera. */
@@ -88,6 +93,9 @@ export class BattleScene extends Phaser.Scene {
   private ghost!: Phaser.GameObjects.Sprite;
   /** Pulsing ring and bobbing arrow on the selected unit. */
   private selRing!: Phaser.GameObjects.Ellipse;
+  /** HP bars of all units, redrawn each frame in one object (one per unit would cost a draw call each). */
+  private hpBars!: Phaser.GameObjects.Graphics;
+  private trails!: SwingTrails;
   private selArrow!: Phaser.GameObjects.Triangle;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
@@ -121,6 +129,9 @@ export class BattleScene extends Phaser.Scene {
     const side = Math.max(0, (VIEW_FIELD_W - ARENA_PX.w) / 2) + FIELD_MARGIN;
     this.arenaBg = this.add.tileSprite(-side, -FIELD_MARGIN, ARENA_PX.w + side * 2, ARENA_PX.h + FIELD_MARGIN * 2, 'stone').setOrigin(0, 0);
     this.grid = this.add.graphics().setDepth(1);
+    this.hpBars = this.add.graphics().setDepth(9999);
+    // Above the units, under HP bars and hit effects.
+    this.trails = new SwingTrails(this, 9990);
     this.ghost = this.add.sprite(0, 0, '__DEFAULT').setOrigin(0.5, 1).setAlpha(0.6).setVisible(false).setDepth(9000);
     this.selRing = this.add.ellipse(0, 0, 18, 7).setStrokeStyle(1, 0xfff060).setFillStyle(0xfff060, 0.25).setVisible(false);
     this.tweens.add({ targets: this.selRing, scaleX: 1.2, scaleY: 1.2, alpha: 0.5, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -177,8 +188,10 @@ export class BattleScene extends Phaser.Scene {
     const events = this.session.update(delta);
     for (const ev of events) this.handleEvent(ev);
     this.updateCamera(delta / 1000);
-    // Units move under a resting mouse, so re-check the hover target every frame.
-    const world = this.pointerWorld(this.input.activePointer);
+    // Units move under a resting mouse, so re-check the hover target every frame. A finger
+    // leaves no resting pointer: there the tap selects.
+    const pointer = this.input.activePointer;
+    const world = pointer.wasTouch ? null : this.pointerWorld(pointer);
     this.hoverUnit = this.selectedBuild === null && world ? this.unitAt(world.x, world.y) : null;
     if (this.pendingSelect) {
       const placed = this.fighterAt(this.pendingSelect.col, this.pendingSelect.row);
@@ -186,6 +199,7 @@ export class BattleScene extends Phaser.Scene {
       if (placed || this.time.now > this.pendingSelect.until) this.pendingSelect = null;
     }
     this.syncUnits();
+    this.trails.draw();
     this.drawGrid();
   }
 
@@ -258,15 +272,7 @@ export class BattleScene extends Phaser.Scene {
       this.setView(all[(i + (e.shiftKey ? all.length - 1 : 1)) % all.length]!);
     });
     onKey(kb, 'keydown-ESC', () => (this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
-    onKey(kb, 'keydown-R', () => {
-      if (this.session.game.phase !== 'over') return;
-      if (this.solo) {
-        this.scene.stop('ui');
-        this.scene.restart({ solo: this.solo });
-      } else {
-        this.toMenu();
-      }
-    });
+    onKey(kb, 'keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
     onKey(kb, 'keydown-U', () => this.upgradeSelected());
     onKey(kb, 'keydown-DELETE', () => this.sellSelected());
     onKey(kb, 'keydown-BACKSPACE', () => this.sellSelected());
@@ -282,35 +288,77 @@ export class BattleScene extends Phaser.Scene {
       this.manualCamUntil = this.time.now + 3000;
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.wasTouch) return this.touchDrag(p);
       const w = this.pointerWorld(p);
       this.hoverCell = w ? this.cellAt(w.x, w.y) : null;
     });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       const w = this.pointerWorld(p);
+      // Touch acts on release, so a swipe can pan the camera instead.
+      if (p.wasTouch) return void (this.touchStart = w ? { x: p.x, y: p.y, panned: false } : null);
       if (!w) return; // HUD area
-      this.ui.hideSummary();
-      if (this.ui.typeChartOpen) return this.ui.toggleTypeChart();
       if (p.rightButtonDown()) return this.clearSelection();
-      const cell = this.cellAt(w.x, w.y);
-      const own = cell ? this.fighterAt(cell.col, cell.row) : undefined;
-      if (own) {
-        this.selectedBuild = null;
-        this.selectedUnit = own.id;
-        return;
-      }
-      const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
-      if (cell && unit) {
-        const result = this.session.send({ type: 'build', unit, col: cell.col, row: cell.row });
-        this.feedback(result);
-        if (!result.ok) return;
-        // One unit per click; Shift keeps the slot armed for placing several.
-        if (!(p.event as MouseEvent).shiftKey) this.selectedBuild = null;
-        this.selectedUnit = this.fighterAt(cell.col, cell.row)?.id ?? null;
-        if (this.selectedUnit === null) this.pendingSelect = { ...cell, until: this.time.now + 1500 };
-        return;
-      }
-      this.selectedUnit = this.unitAt(w.x, w.y);
+      // One unit per click; Shift keeps the slot armed for placing several.
+      this.fieldClick(w, (p.event as MouseEvent).shiftKey);
     });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      const start = this.touchStart;
+      this.touchStart = null;
+      const w = this.pointerWorld(p);
+      if (p.wasTouch && start && !start.panned && w) this.touchTap(w);
+    });
+  }
+
+  /** Click or tap on the battlefield: select an own fighter, place the armed one, or pick any unit. */
+  private fieldClick(w: { x: number; y: number }, keepArmed: boolean): void {
+    this.ui.hideSummary();
+    if (this.ui.typeChartOpen) return this.ui.toggleTypeChart();
+    const cell = this.cellAt(w.x, w.y);
+    const own = cell ? this.fighterAt(cell.col, cell.row) : undefined;
+    if (own) {
+      this.selectedBuild = null;
+      this.selectedUnit = own.id;
+      return;
+    }
+    const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
+    if (cell && unit) {
+      const result = this.session.send({ type: 'build', unit, col: cell.col, row: cell.row });
+      this.feedback(result);
+      if (!result.ok) return;
+      // Still armed: the info panel keeps showing the fighter to place, not the one just built.
+      if (keepArmed) return;
+      this.selectedBuild = null;
+      this.selectedUnit = this.fighterAt(cell.col, cell.row)?.id ?? null;
+      if (this.selectedUnit === null) this.pendingSelect = { ...cell, until: this.time.now + 1500 };
+      return;
+    }
+    this.selectedUnit = this.unitAt(w.x, w.y);
+  }
+
+  /**
+   * Touch has no hover: with a fighter armed, the first tap on a free spot shows the placement
+   * preview and a second tap there builds. The slot stays armed until tapped again or a tap
+   * lands off the grid.
+   */
+  private touchTap(w: { x: number; y: number }): void {
+    const cell = this.cellAt(w.x, w.y);
+    const previewed = !!cell && this.hoverCell?.col === cell.col && this.hoverCell.row === cell.row;
+    this.hoverCell = cell;
+    if (this.selectedBuild !== null) {
+      if (!cell) this.selectedBuild = null;
+      else if (!previewed && !this.fighterAt(cell.col, cell.row)) return;
+    }
+    this.fieldClick(w, true);
+  }
+
+  /** One-finger swipe on the battlefield pans the lane, like the mouse wheel. */
+  private touchDrag(p: Phaser.Input.Pointer): void {
+    const start = this.touchStart;
+    if (!start || !p.isDown) return;
+    if (!start.panned && Math.hypot(p.x - start.x, p.y - start.y) < TOUCH_PAN_PX) return;
+    start.panned = true;
+    this.camX -= (p.x - p.prevPosition.x) / FIELD_ZOOM;
+    this.manualCamUntil = this.time.now + 3000;
   }
 
   private clearSelection(): void {
@@ -453,6 +501,13 @@ export class BattleScene extends Phaser.Scene {
     if (next !== undefined) this.setView(next);
   }
 
+  /** Solo: same setup once more; online games go back to the menu. */
+  private playAgain(): void {
+    if (!this.solo) return this.toMenu();
+    this.scene.stop('ui');
+    this.scene.restart({ solo: this.solo });
+  }
+
   private toMenu(): void {
     if (this.session.online) void (this.session as NetSession).room.leave();
     this.scene.stop('ui');
@@ -468,6 +523,7 @@ export class BattleScene extends Phaser.Scene {
 
   private syncUnits(): void {
     const game = this.session.game;
+    this.hpBars.clear();
     for (const [id, view] of this.views) {
       // Gone units drop their view; upgraded ones rebuild it for the new sprite and auras.
       const u = game.units.get(id);
@@ -480,7 +536,6 @@ export class BattleScene extends Phaser.Scene {
       view.shadow.setVisible(visible && !u.dead);
       view.ring?.setVisible(visible && !u.dead);
       view.ownerRing?.setVisible(visible && !u.dead);
-      view.hp.setVisible(visible);
       if (!visible) continue;
       const pos = this.session.interpolated(u.id)!;
       const s = this.toField(pos.x, pos.y);
@@ -531,22 +586,23 @@ export class BattleScene extends Phaser.Scene {
     const scale = spec?.scale ?? 1;
     const sprite = this.add.sprite(0, 0, key).setOrigin(0.5, king ? 0.9 : 1).setScale(scale);
     if (king) sprite.play(`${KING_SPRITES[u.team]}-idle`);
-    if (spec?.hue) sprite.enableFilters().filters!.internal.addColorMatrix().colorMatrix.hue(spec.hue);
-    const shadow = this.add.ellipse(0, 0, king ? 28 : 12 * scale, king ? 8 : 4 * scale, 0x000000, 0.35);
+    const shadow = this.add.image(0, 0, ellipseTexture(this, king ? 28 : 12 * scale, king ? 8 : 4 * scale, 0.35)).setTint(0x000000);
     // Fighters and sends wear their owner's colour at the feet.
     const owned = u.kind === 'fighter' || u.kind === 'merc';
     const color = playerColor(u.owner);
-    const ownerRing = owned ? this.add.ellipse(0, 0, 14 * scale, 5 * scale, color, 0.3).setStrokeStyle(1, color, 0.9) : undefined;
+    const ownerRing = owned ? this.add.image(0, 0, ellipseTexture(this, 14 * scale, 5 * scale, 0.3, 0.9)).setTint(color) : undefined;
     // Aura carriers get a pulsing ring at their feet in the colour of what the aura does.
     const aura = this.session.game.def(u).abilities?.find((a) => a.kind === 'aura');
-    let ring: Phaser.GameObjects.Ellipse | undefined;
+    let ring: Phaser.GameObjects.Image | undefined;
     if (aura?.kind === 'aura') {
-      ring = this.add.ellipse(0, 0, 26 * scale, 9 * scale, aura.enemies ? 0xb050ff : AURA_GLOW[aura.stat], 0.45).setBlendMode(Phaser.BlendModes.ADD);
+      ring = this.add
+        .image(0, 0, ellipseTexture(this, 26 * scale, 9 * scale, 0.45))
+        .setTint(aura.enemies ? 0xb050ff : AURA_GLOW[aura.stat])
+        .setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({ targets: ring, alpha: 0.12, scaleX: 1.25, scaleY: 1.25, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
-    const hp = this.add.graphics();
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, ownerRing, hp, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
+    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
   }
@@ -561,7 +617,6 @@ export class BattleScene extends Phaser.Scene {
     view.shadow.destroy();
     view.ring?.destroy();
     view.ownerRing?.destroy();
-    view.hp.destroy();
     this.views.delete(id);
   }
 
@@ -596,8 +651,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawHpBar(u: UnitState, view: UnitView, x: number, y: number): void {
-    const g = view.hp;
-    g.clear();
+    const g = this.hpBars;
     // Creeps and sends always show their HP; own fighters only once hurt.
     const attacker = u.kind === 'creep' || u.kind === 'merc';
     if (u.dead || u.kind === 'king' || (!attacker && u.hp >= u.maxHp)) return;
@@ -606,7 +660,6 @@ export class BattleScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.8).fillRect(Math.round(x) - w / 2 - 1, top - 1, w + 2, 3);
     const ratio = Math.max(0, u.hp / u.maxHp);
     g.fillStyle(ratio > 0.5 ? 0x60e060 : ratio > 0.25 ? 0xe0c040 : 0xe04040, 1).fillRect(Math.round(x) - w / 2, top, Math.ceil(w * ratio), 1);
-    g.setDepth(9999);
   }
 
   // ---- events & effects ---------------------------------------------------------
@@ -640,7 +693,7 @@ export class BattleScene extends Phaser.Scene {
         if (character) {
           // Attack pose plus a visible weapon, since the sheets have a single attack frame.
           const weapon = weaponFor(def);
-          if (weapon) weaponSwing(this, weapon, Math.round(from.x + lunge), Math.round(from.y), dir, this.unitDepth(a, view, from.y) + 1);
+          if (weapon) weaponSwing(this, this.trails, weapon, Math.round(from.x + lunge), Math.round(from.y), dir, this.unitDepth(a, view, from.y) + 1);
         }
         if (ranged) projectile(this, def.attack.type, from.x + 6 * dir, from.y - 8, to.x, to.y - 6);
         // Monster fighters carry no weapon, so their bite gets the bigger claw mark;
@@ -813,7 +866,10 @@ export class BattleScene extends Phaser.Scene {
       const name = (p.index === this.me ? 'YOU' : p.name.toUpperCase()).padEnd(5);
       return `${name}${game.data.builders[p.builder]!.name.toUpperCase().padEnd(10)}LEAKS ${String(p.leaks).padStart(3)}  VALUE ${value}`;
     });
-    this.ui.showBanner([title, reason, '', ...rows, '', this.solo ? 'R: PLAY AGAIN   ESC: MENU' : 'ESC: MENU'], 0);
+    const keys = TOUCH ? [] : ['', this.solo ? 'R: PLAY AGAIN   ESC: MENU' : 'ESC: MENU'];
+    const bottom = this.ui.showBanner([title, reason, '', ...rows, ...keys], 0);
+    const again = this.solo ? [{ label: 'PLAY AGAIN', action: () => this.playAgain() }] : [];
+    this.ui.showChoices(bottom + 4, [...again, { label: 'MENU', action: () => this.toMenu() }]);
   }
 
   // ---- grid ------------------------------------------------------------------

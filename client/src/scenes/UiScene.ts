@@ -3,6 +3,7 @@ import type { GameView } from '@legion/shared';
 import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
+import { TextButton } from '../ui/TextButton.ts';
 import { Tutorial } from '../ui/Tutorial.ts';
 import { typeChart } from '../ui/typeChart.ts';
 import { FONT } from './BootScene.ts';
@@ -28,6 +29,7 @@ export class UiScene extends Phaser.Scene {
   private message: Phaser.GameObjects.Container | null = null;
   private summary: Phaser.GameObjects.Container | null = null;
   private chart: Phaser.GameObjects.Container | null = null;
+  private choices: TextButton[] = [];
 
   constructor() {
     super('ui');
@@ -52,9 +54,11 @@ export class UiScene extends Phaser.Scene {
     this.fieldLabel?.setText(text).setTint(color);
   }
 
-  /** FF6 message window over the battlefield; `holdMs` = 0 keeps it open. */
-  showBanner(lines: string[], holdMs = 1300): void {
+  /** FF6 message window over the battlefield; `holdMs` = 0 keeps it open. Returns its bottom edge. */
+  showBanner(lines: string[], holdMs = 1300): number {
     this.message?.destroy();
+    this.choices.forEach((b) => b.destroy());
+    this.choices = [];
     const w = Math.max(...lines.map((l) => l.length)) * 8 + 32;
     const h = lines.length * 11 + 13;
     const box = ff6Window(this, -w / 2, -h / 2, w, h);
@@ -63,6 +67,14 @@ export class UiScene extends Phaser.Scene {
     this.message = c;
     this.tweens.add({ targets: c, scaleY: 1, duration: 120, ease: 'Back.easeOut' });
     if (holdMs) this.tweens.add({ targets: c, alpha: 0, delay: holdMs, duration: 300, onComplete: () => c.destroy() });
+    return c.y + h / 2;
+  }
+
+  /** A row of buttons under the open message window (end screen), so it works without keys. */
+  showChoices(y: number, choices: { label: string; action: () => void }[]): void {
+    const w = 88;
+    const left = (VIEW_W - choices.length * (w + 8) + 8) / 2;
+    this.choices = choices.map((c, i) => new TextButton(this, left + i * (w + 8), y, w, c.label, c.action, 18).setDepth(20000));
   }
 
   /** Wave result in a small window left of the build grid (under the field label), so the grid stays free. */

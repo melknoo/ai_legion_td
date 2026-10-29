@@ -6,9 +6,17 @@ import { BootScene } from './scenes/BootScene.ts';
 import { LobbyScene } from './scenes/LobbyScene.ts';
 import { TitleScene } from './scenes/TitleScene.ts';
 import { UiScene } from './scenes/UiScene.ts';
+import { installTouchShell } from './ui/touch.ts';
 
 // The dev server has no /client-error next to the page; there the console is enough.
 if (import.meta.env.PROD) installErrorReporting();
+
+// Installable app (PWA): the service worker caches page and sprites, so solo games also run
+// offline. Not in dev, where it would get in the way of Vite's hot reload.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+installTouchShell();
 
 // Fill the window at the canvas aspect ratio; `image-rendering: pixelated` keeps the pixel art sharp
 // at fractional zooms (some pixels end up one screen pixel wider, which is hard to notice).

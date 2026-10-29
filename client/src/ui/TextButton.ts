@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FONT } from '../scenes/BootScene.ts';
 import { panelTexture } from './ff6Window.ts';
+import { bindPress } from './touch.ts';
 
 /** Single-line FF6-style button. */
 export class TextButton {
@@ -19,11 +20,10 @@ export class TextButton {
     };
     this.bg = scene.add.image(x, y, this.textures.slot).setOrigin(0, 0);
     this.text = scene.add.bitmapText(x + w / 2, y + h / 2 + 1, FONT, label).setOrigin(0.5);
-    this.bg
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => ((this.hovered = true), this.refresh()))
-      .on('pointerout', () => ((this.hovered = false), this.refresh()))
-      .on('pointerdown', () => this.enabled && onClick());
+    bindPress(this.bg.setInteractive({ useHandCursor: true }), {
+      onClick: () => this.enabled && onClick(),
+      onHighlight: (on) => ((this.hovered = on), this.refresh()),
+    });
   }
 
   setLabel(label: string): this {
@@ -41,6 +41,17 @@ export class TextButton {
     this.active = active;
     this.refresh();
     return this;
+  }
+
+  setDepth(depth: number): this {
+    this.bg.setDepth(depth);
+    this.text.setDepth(depth);
+    return this;
+  }
+
+  destroy(): void {
+    this.bg.destroy();
+    this.text.destroy();
   }
 
   setVisible(visible: boolean): this {

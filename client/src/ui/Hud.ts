@@ -7,6 +7,7 @@ import { RichLine, richText, type Segment } from './RichLine.ts';
 import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
 import { SLOT_KEYS } from './keys.ts';
+import { TOUCH, bindPress } from './touch.ts';
 
 /** What the command card offers: fighters for gold or sends for lumber. */
 export type SlotMode = 'build' | 'send';
@@ -99,7 +100,6 @@ export class Hud {
   private readonly pageButton: MiniButton;
   private readonly hand: Phaser.GameObjects.Image;
   private readonly portrait: Phaser.GameObjects.Image;
-  private readonly portraitHue: Phaser.Filters.ColorMatrix;
   private readonly infoName: Phaser.GameObjects.BitmapText;
   private readonly infoSub: RichLine;
   private readonly stats: Phaser.GameObjects.Container;
@@ -111,7 +111,6 @@ export class Hud {
   private readonly waveButton: {
     bg: Phaser.GameObjects.Image;
     icon: Phaser.GameObjects.Image;
-    hue: Phaser.Filters.ColorMatrix;
     text: Phaser.GameObjects.BitmapText;
     textures: Record<'slot' | 'slotHover' | 'slotActive', string>;
   };
@@ -131,7 +130,7 @@ export class Hud {
   private portraitState = '';
   private readonly queueBox: Phaser.GameObjects.Image;
   private readonly queueLabel: Phaser.GameObjects.BitmapText;
-  private readonly queueIcons: { img: Phaser.GameObjects.Image; hue: Phaser.Filters.ColorMatrix; count: Phaser.GameObjects.BitmapText }[];
+  private readonly queueIcons: { img: Phaser.GameObjects.Image; count: Phaser.GameObjects.BitmapText }[];
   private queueState = '';
 
   constructor(
@@ -166,19 +165,11 @@ export class Hud {
     this.waveButton = {
       bg: waveBg,
       icon: waveIcon,
-      hue: waveIcon.enableFilters().filters!.internal.addColorMatrix(),
       text: scene.add.bitmapText(waveBg.x + 21, 4, FONT, '').setLineSpacing(2),
       textures: waveTextures,
     };
     const waveHover = hoverFn({ on: 'wave' });
-    waveBg
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => waveHover(true))
-      .on('pointerout', () => waveHover(false))
-      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-        e.stopPropagation();
-        this.toggleWave();
-      });
+    bindPress(waveBg.setInteractive({ useHandCursor: true }), { onClick: () => this.toggleWave(), onHover: waveHover });
 
     // Bottom panels (y 186..270). Left: 4x3 command card (QWER / ASDF / YXCV) plus a column of mode buttons.
     ff6Window(scene, 2, 186, 178, 84);
@@ -195,14 +186,16 @@ export class Hud {
         onHover: hoverFn({ on: 'slot', index: i }),
       }),
     );
+    // Touch: the column gets the full width up to the window border, for fingers.
+    const [miniX, miniSize, miniY] = TOUCH ? [162, 16, [189, 206, 225, 250]] : [164, 13, [189, 203, 222, 254]];
     const mini = (y: number, icon: { icon?: string; text?: string }, onClick: () => void, hover: Hover) =>
-      new MiniButton(scene, { x: 164, y, size: 13, ...icon, onClick, onHover: hoverFn(hover) });
+      new MiniButton(scene, { x: miniX, y, size: miniSize, touchPad: 2, ...icon, onClick, onHover: hoverFn(hover) });
     this.modeButtons = {
-      build: mini(189, { icon: 'icon-coin' }, () => act.setSlotMode('build'), { on: 'mode', mode: 'build' }),
-      send: mini(203, { icon: 'icon-log' }, () => act.setSlotMode('send'), { on: 'mode', mode: 'send' }),
+      build: mini(miniY[0]!, { icon: 'icon-coin' }, () => act.setSlotMode('build'), { on: 'mode', mode: 'build' }),
+      send: mini(miniY[1]!, { icon: 'icon-log' }, () => act.setSlotMode('send'), { on: 'mode', mode: 'send' }),
     };
-    this.pageButton = mini(222, { text: '>' }, () => act.nextSendPage(), { on: 'page' });
-    mini(254, { text: '?' }, () => act.toggleTypeChart(), { on: 'chart' });
+    this.pageButton = mini(miniY[2]!, { text: '>' }, () => act.nextSendPage(), { on: 'page' });
+    mini(miniY[3]!, { text: '?' }, () => act.toggleTypeChart(), { on: 'chart' });
     this.hand = scene.add.image(0, 0, 'icon-hand').setOrigin(1, 0.5).setDepth(1);
     scene.tweens.add({ targets: this.hand, x: '-=2', duration: 300, yoyo: true, repeat: -1 });
 
@@ -211,13 +204,12 @@ export class Hud {
     this.queueLabel = scene.add.bitmapText(7, 171, FONT, '').setTint(0xc0c8f0);
     this.queueIcons = Array.from({ length: QUEUE_GROUPS }, () => {
       const img = scene.add.image(0, 167, '__DEFAULT').setOrigin(0, 0).setVisible(false);
-      return { img, hue: img.enableFilters().filters!.internal.addColorMatrix(), count: scene.add.bitmapText(0, 175, FONT, '') };
+      return { img, count: scene.add.bitmapText(0, 175, FONT, '') };
     });
 
     // Middle: info / tooltip.
     ff6Window(scene, 182, 186, 156, 84);
     this.portrait = scene.add.image(186, 190, '__DEFAULT').setOrigin(0, 0);
-    this.portraitHue = this.portrait.enableFilters().filters!.internal.addColorMatrix();
     this.infoName = scene.add.bitmapText(228, 190, FONT, '');
     this.infoSub = new RichLine(scene, 228, 199);
     // HP, damage (attack type icon), armor (armor type icon), range.
@@ -303,7 +295,6 @@ export class Hud {
         const locked = g.wave < (merc.minWave ?? 0);
         const ok = !locked && me.lumber >= merc.lumberCost;
         slot.setContent(facesetKey(merc.unit), locked ? `W${merc.minWave}` : String(merc.lumberCost), {
-          hue: UNIT_SPRITES[merc.unit]?.hue,
           corner: SLOT_KEYS[i],
           costIcon: locked ? undefined : 'icon-log',
           labelColor: ok || locked ? 0xffffff : 0xff7070,
@@ -335,7 +326,6 @@ export class Hud {
       // The badge backing hints whether this attack type suits the coming wave.
       const vs = creep ? g.data.damageTable[d.attack.type][creep.armorType] : 1;
       slot.setContent(facesetKey(id), String(cost), {
-        hue: UNIT_SPRITES[id]?.hue,
         corner: SLOT_KEYS[i],
         costIcon: 'icon-coin',
         labelColor: ok || !build ? 0xffffff : 0xff7070,
@@ -388,8 +378,6 @@ export class Hud {
       q.count.setVisible(!!spec);
       if (!group || !spec) return;
       q.img.setTexture(spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`, DIR.left).setX(x);
-      q.hue.colorMatrix.reset();
-      if (spec.hue) q.hue.colorMatrix.hue(spec.hue);
       const n = group[1] > 1 ? String(group[1]) : '';
       q.count.setText(n).setX(x + 14);
       x += 16 + (n ? n.length * 8 : 0) + 2;
@@ -474,11 +462,17 @@ export class Hud {
       if (t?.kind === 'upgrade') return this.showUnit(t.to, `UPGRADE {coin}${g.data.units[t.to]?.goldCost}`, 'fighter', '');
     }
     if (h?.on === 'wave' || this.wavePinned) return this.showWave(this.nextWave(), true);
+    // The armed fighter: on touch there is no hover over its slot to show it.
+    const armed = s.slotMode === 'build' && s.selectedBuild !== null ? me.fighters[s.selectedBuild] : undefined;
+    if (armed && !hoveredOther) return this.showUnit(armed, `TIER ${s.selectedBuild! + 1}  {coin}${g.data.units[armed]?.goldCost}`, 'fighter', TOUCH ? 'TAP A SPOT TWICE' : '');
     const hovered = hoveredOther ? g.units.get(s.hoverUnit!) : undefined;
     const live = hovered ?? selected;
     if (live) return this.showLive(live);
     // Idle: preview the wave that is coming (or running).
-    if (!g.data.waves[g.wave - 1]) return this.showText('icon-hand', 'COMMANDS', '', 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT');
+    if (!g.data.waves[g.wave - 1]) {
+      const help = TOUCH ? 'TAP SLOT, TAP GRID\nTWICE TO BUILD\nHOLD BUTTON: INFO\nSWIPE: MOVE VIEW' : 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT';
+      return this.showText('icon-hand', 'COMMANDS', '', help);
+    }
     this.showWave(g.wave, false);
   }
 
@@ -512,7 +506,7 @@ export class Hud {
   private showUnit(id: string, sub: string, role: Role, body: string, live?: UnitState): void {
     const d = this.game.data.units[id]!;
     const king = live?.kind === 'king';
-    this.setPortrait(king ? 'btn-hp' : facesetKey(id), king ? 0 : UNIT_SPRITES[id]?.hue ?? 0);
+    this.setPortrait(king ? 'btn-hp' : facesetKey(id));
     this.infoName.setText(d.name.toUpperCase());
     this.infoSub.set(richText(sub, 0xc0c8f0));
     this.stats.setVisible(true);
@@ -562,7 +556,7 @@ export class Hud {
   }
 
   private showText(icon: string, name: string, sub: string, body: string): void {
-    this.setPortrait(icon, 0);
+    this.setPortrait(icon);
     this.infoName.setText(name);
     this.infoSub.set(richText(sub, 0xc0c8f0));
     this.stats.setVisible(false);
@@ -593,15 +587,12 @@ export class Hud {
     rng!.setText(String(d.attack.range));
   }
 
-  private setPortrait(key: string, hue: number): void {
-    const state = `${key}:${hue}`;
-    if (state === this.portraitState) return;
-    this.portraitState = state;
+  private setPortrait(key: string): void {
+    if (key === this.portraitState) return;
+    this.portraitState = key;
     // Small icons sit centred in the portrait box.
     const small = !key.endsWith('-Face');
     this.portrait.setTexture(key).setOrigin(small ? 0.5 : 0, small ? 0.5 : 0).setPosition(small ? 205 : 186, small ? 209 : 190);
-    this.portraitHue.colorMatrix.reset();
-    if (hue) this.portraitHue.colorMatrix.hue(hue);
   }
 
   private updateActions(unit: UnitState | undefined): void {
@@ -681,8 +672,6 @@ export class Hud {
     const spec = wave ? UNIT_SPRITES[wave.creep] : undefined;
     b.icon.setVisible(!!spec);
     if (spec) b.icon.setTexture(spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`, DIR.left);
-    b.hue.colorMatrix.reset();
-    if (spec?.hue) b.hue.colorMatrix.hue(spec.hue);
     b.text.setText(wave ? `W${n}\n${wave.count}X` : 'END');
   }
 

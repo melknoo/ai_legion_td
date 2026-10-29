@@ -181,7 +181,17 @@ export function bossPath(folder: string, anim: 'Idle' | 'Hit' | 'AttackLeft'): s
   return `${BASE}/Actor/Boss/${folder}/${anim}.png`;
 }
 
-/** Texture/animation key prefix; the pack has a character and a monster both named e.g. "Spirit". */
-export function spriteKey(spec: SpriteSpec): string {
+/** Key the pack's sheets are loaded under; the pack has a character and a monster both named e.g. "Spirit". */
+export function spriteBaseKey(spec: SpriteSpec): string {
   return spec.kind === 'monster' ? `m-${spec.folder}` : spec.folder;
+}
+
+/** Texture/animation key prefix. Hue-shifted specs use their own copies, baked in BootScene. */
+export function spriteKey(spec: SpriteSpec): string {
+  return spec.hue ? `${spriteBaseKey(spec)}~${spec.hue}` : spriteBaseKey(spec);
+}
+
+/** Texture suffixes each sprite spec has (`${spriteKey(spec)}-Walk` etc.). */
+export function spriteSheets(spec: SpriteSpec): string[] {
+  return spec.kind === 'character' ? ['Walk', 'Idle', 'Attack', 'Dead', 'Face'] : ['Walk', 'Face'];
 }

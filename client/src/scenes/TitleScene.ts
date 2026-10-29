@@ -9,6 +9,7 @@ import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
 import { setTipsEnabled, tipsEnabled } from '../ui/Tutorial.ts';
 import { onKey } from '../ui/keys.ts';
+import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
 
 type Panel = 'main' | 'solo' | 'join' | 'name' | 'builders';
@@ -144,7 +145,7 @@ export class TitleScene extends Phaser.Scene {
       }).setActive(true);
       this.items = [{ label: () => (join ? 'JOIN' : 'OK'), action: () => (join ? this.join(this.input_!.value) : this.saveName(this.input_!.value)) }, back];
       this.window(150, 158, 180, 74, 34);
-      this.layer.add(this.add.bitmapText(240, 164, FONT, join ? 'ROOM CODE OR LINK (CTRL+V)' : 'YOUR NAME').setOrigin(0.5, 0).setTint(0xc0c8f0));
+      this.layer.add(this.add.bitmapText(240, 164, FONT, join ? (TOUCH ? 'ROOM CODE OR LINK' : 'ROOM CODE OR LINK (CTRL+V)') : 'YOUR NAME').setOrigin(0.5, 0).setTint(0xc0c8f0));
     }
   }
 
@@ -258,7 +259,6 @@ export class TitleScene extends Phaser.Scene {
       const spec = UNIT_SPRITES[id];
       if (!spec) return;
       const s = this.add.sprite(-20 - i * 70, 252, `${spriteKey(spec)}-Walk`).setScale(2).play(`${spriteKey(spec)}-walk`).setDepth(2);
-      if (spec.hue) s.enableFilters().filters!.internal.addColorMatrix().colorMatrix.hue(spec.hue);
       this.tweens.add({ targets: s, x: VIEW_W + 520 - i * 70, duration: 26000, repeat: -1 });
     });
   }

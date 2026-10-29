@@ -1,6 +1,17 @@
 import Phaser from 'phaser';
 import { FONT } from '../scenes/BootScene.ts';
 import { panelTexture } from './ff6Window.ts';
+import { TOUCH, bindPress } from './touch.ts';
+
+const BACKING = 0x0c1240;
+
+/**
+ * Dark strip behind text on a portrait. A tinted white image rather than a Rectangle shape:
+ * shapes and images in between each other split the HUD into a draw call per piece.
+ */
+function backing(scene: Phaser.Scene, x: number, y: number, w: number, h: number): Phaser.GameObjects.Image {
+  return scene.add.image(x, y, '__WHITE').setOrigin(0, 0).setDisplaySize(w, h).setTint(BACKING).setAlpha(0.85);
+}
 
 export interface SlotButtonOptions {
   x: number;
@@ -25,13 +36,12 @@ export class SlotButton {
   readonly root: Phaser.GameObjects.Container;
   private readonly bg: Phaser.GameObjects.Image;
   private readonly icon: Phaser.GameObjects.Image;
-  private readonly hue: Phaser.Filters.ColorMatrix;
-  private readonly cornerBg: Phaser.GameObjects.Rectangle;
+  private readonly cornerBg: Phaser.GameObjects.Image;
   private readonly corner: Phaser.GameObjects.BitmapText;
-  private readonly labelBg: Phaser.GameObjects.Rectangle;
+  private readonly labelBg: Phaser.GameObjects.Image;
   private readonly costIcon: Phaser.GameObjects.Image;
   private readonly label: Phaser.GameObjects.BitmapText;
-  private readonly badgeBg: Phaser.GameObjects.Rectangle;
+  private readonly badgeBg: Phaser.GameObjects.Image;
   private readonly badges: Phaser.GameObjects.Image[];
   /** Pulsing bright frame around the active tile. */
   private readonly frame: Phaser.GameObjects.Rectangle;
@@ -40,7 +50,6 @@ export class SlotButton {
   private enabled = true;
   private active = false;
   private iconKey = '';
-  private iconHue = 0;
 
   constructor(scene: Phaser.Scene, private readonly o: SlotButtonOptions) {
     this.textures = {
@@ -50,35 +59,30 @@ export class SlotButton {
     };
     this.bg = scene.add.image(0, 0, this.textures.slot).setOrigin(0, 0);
     this.icon = scene.add.image(Math.floor(o.w / 2), o.iconY ?? 2, '__DEFAULT').setOrigin(0.5, 0);
-    this.hue = this.icon.enableFilters().filters!.internal.addColorMatrix();
     // Hotkey letter, backed like the label so it reads on bright portraits.
-    this.cornerBg = scene.add.rectangle(2, 2, 1, 9, 0x0c1240, 0.85).setOrigin(0, 0);
+    this.cornerBg = backing(scene, 2, 2, 1, 9);
     this.corner = scene.add.bitmapText(3, 3, FONT, '').setTint(0xfff080);
     // Dark strip keeps the label readable where it overlaps a portrait.
-    this.labelBg = scene.add.rectangle(0, o.h - 11, 1, 10, 0x0c1240, 0.85).setOrigin(0, 0);
+    this.labelBg = backing(scene, 0, o.h - 11, 1, 10);
     this.costIcon = scene.add.image(0, o.h - 10, '__DEFAULT').setOrigin(0, 0);
     this.label = scene.add.bitmapText(0, o.h - 10, FONT, '');
     // Small type icons stacked in the top-right corner.
     const row = o.badgeRow ? 1 : 0;
-    this.badgeBg = scene.add.rectangle(o.w - 11 - row * 9, 2, 9, 9, 0x0c1240, 0.85).setOrigin(0, 0);
+    this.badgeBg = backing(scene, o.w - 11 - row * 9, 2, 9, 9);
     this.badges = [0, 1].map((i) => scene.add.image(o.w - 10 - row * (1 - i) * 9, 3 + (1 - row) * i * 9, '__DEFAULT').setOrigin(0, 0));
     this.frame = scene.add.rectangle(1, 1, o.w - 2, o.h - 2).setOrigin(0, 0).setStrokeStyle(2, 0xfff4a0).setVisible(false);
     scene.tweens.add({ targets: this.frame, alpha: 0.35, duration: 350, yoyo: true, repeat: -1 });
     this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges, this.frame]);
-    this.bg
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => this.hover(true))
-      .on('pointerout', () => this.hover(false))
-      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-        e.stopPropagation();
-        if (this.enabled) o.onClick();
-      });
+    bindPress(this.bg.setInteractive({ useHandCursor: true }), {
+      onClick: () => this.enabled && o.onClick(),
+      onHover: (over) => this.hover(over),
+    });
   }
 
   setContent(
     icon: string,
     label: string,
-    opts: { hue?: number; corner?: string; costIcon?: string; labelColor?: number; badges?: { icon: string; tint: number }[]; badgeBg?: number } = {},
+    opts: { corner?: string; costIcon?: string; labelColor?: number; badges?: { icon: string; tint: number }[]; badgeBg?: number } = {},
   ): this {
     const badges = opts.badges ?? [];
     this.badges.forEach((b, i) => {
@@ -89,12 +93,10 @@ export class SlotButton {
     const along = badges.length * 9 + 1;
     this.badgeBg
       .setVisible(badges.length > 0)
-      .setSize(this.o.badgeRow ? along : 9, this.o.badgeRow ? 9 : along)
-      .setFillStyle(opts.badgeBg ?? 0x0c1240, 0.85);
-    const hue = opts.hue ?? 0;
-    if (icon !== this.iconKey || hue !== this.iconHue) {
+      .setDisplaySize(this.o.badgeRow ? along : 9, this.o.badgeRow ? 9 : along)
+      .setTint(opts.badgeBg ?? BACKING);
+    if (icon !== this.iconKey) {
       this.iconKey = icon;
-      this.iconHue = hue;
       this.icon.setTexture(icon);
       const crop = this.o.iconCrop;
       if (crop && this.icon.height > crop.height) {
@@ -102,19 +104,17 @@ export class SlotButton {
       } else {
         this.icon.setCrop().setY(this.o.iconY ?? 2);
       }
-      this.hue.colorMatrix.reset();
-      if (hue) this.hue.colorMatrix.hue(hue);
     }
     const corner = opts.corner ?? '';
     this.corner.setText(corner);
-    this.cornerBg.setVisible(corner.length > 0).setSize(corner.length * 8 + 1, 9);
+    this.cornerBg.setVisible(corner.length > 0).setDisplaySize(corner.length * 8 + 1, 9);
     this.label.setText(label).setTint(opts.labelColor ?? 0xffffff);
     const iconW = opts.costIcon ? 9 : 0;
     const left = Math.floor((this.o.w - (label.length * 8 + iconW)) / 2);
     this.costIcon.setVisible(!!opts.costIcon).setX(left);
     if (opts.costIcon) this.costIcon.setTexture(opts.costIcon);
     this.label.setX(left + iconW);
-    this.labelBg.setVisible(label.length > 0).setX(left - 2).setSize(label.length * 8 + iconW + 3, 10);
+    this.labelBg.setVisible(label.length > 0).setX(left - 2).setDisplaySize(label.length * 8 + iconW + 3, 10);
     return this;
   }
 
@@ -162,7 +162,7 @@ export class MiniButton {
 
   constructor(
     scene: Phaser.Scene,
-    o: { x: number; y: number; size: number; icon?: string; text?: string; onClick: () => void; onHover: (over: boolean) => void },
+    o: { x: number; y: number; size: number; icon?: string; text?: string; touchPad?: number; onClick: () => void; onHover: (over: boolean) => void },
   ) {
     this.onHover = o.onHover;
     this.textures = {
@@ -175,14 +175,18 @@ export class MiniButton {
     this.face = o.icon
       ? scene.add.image(o.x + mid, o.y + mid, o.icon)
       : scene.add.bitmapText(o.x + mid + 1, o.y + mid + 1, FONT, o.text ?? '').setOrigin(0.5).setTint(0xfff080);
-    this.bg
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => ((this.hovered = true), this.refresh(), o.onHover(true)))
-      .on('pointerout', () => ((this.hovered = false), this.refresh(), o.onHover(false)))
-      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-        e.stopPropagation();
-        if (this.enabled) o.onClick();
-      });
+    // Touch: the frame of a small button leaves no room around it, so its hit area reaches
+    // `touchPad` further out on every side.
+    const pad = TOUCH ? (o.touchPad ?? 0) : 0;
+    this.bg.setInteractive({
+      hitArea: new Phaser.Geom.Rectangle(-pad, -pad, o.size + 2 * pad, o.size + 2 * pad),
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      useHandCursor: true,
+    });
+    bindPress(this.bg, {
+      onClick: () => this.enabled && o.onClick(),
+      onHover: (over) => ((this.hovered = over), this.refresh(), o.onHover(over)),
+    });
   }
 
   setState(enabled: boolean, active = false): this {
@@ -228,14 +232,10 @@ export class TabButton {
     };
     this.bg = scene.add.image(x, y, this.textures.slot).setOrigin(0, 0);
     this.text = scene.add.bitmapText(x + w / 2, y + h / 2 + 1, FONT, label).setOrigin(0.5).setCenterAlign().setLineSpacing(1);
-    this.bg
-      .setInteractive({ useHandCursor: true })
-      .on('pointerover', () => ((this.hovered = true), this.refresh()))
-      .on('pointerout', () => ((this.hovered = false), this.refresh()))
-      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
-        e.stopPropagation();
-        onClick();
-      });
+    bindPress(this.bg.setInteractive({ useHandCursor: true }), {
+      onClick,
+      onHighlight: (on) => ((this.hovered = on), this.refresh()),
+    });
   }
 
   setActive(active: boolean): void {

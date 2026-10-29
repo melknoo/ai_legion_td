@@ -23,6 +23,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 ## Gotchas
 - Sprite texture keys must go through `spriteKey()`: the pack has characters and monsters with the same folder name (e.g. Spirit).
 - Phaser 4's glow filter renders black boxes on small sprites – don't use it.
+- Mobile performance: no filters on per-unit or HUD objects (each one is an extra render pass); hue-shifted sprites are baked copies (`spriteKey()` adds `~hue`, `render/hue.ts`, baked in BootScene). Don't mix Shapes/Graphics in between images either (each switch is a draw call): use `ellipseTexture()` / tinted `__WHITE` images, one shared Graphics per layer (HP bars, `SwingTrails`). A busy 4v4 fight is ~13 draw calls per frame; count `gl.drawElements` after rendering changes.
 - Phaser re-dispatches queued key events; keyboard input is deduped in `client/src/ui/keys.ts`.
 - Killed creeps and sends are removed from the state before their `death` event is handled; read their `def` from the unit view (it lives until the next `syncUnits`), position from the event.
 - No pushback: enemies cannot shove a unit that is fighting (`engaged` set in `game.ts`). A test guards this.
@@ -36,5 +37,5 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 ## Open
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
-- Mobile version: postponed by the owner. Landscape looks feasible (touch-drag camera, long-press instead of hover, fullscreen, DOM name input); best after the WC3-style HUD rework.
+- Mobile: first version is in (PWA, touch controls, see README). Not yet checked on a real phone/tablet; desktop Chrome has no touch, so tests feed touch events into `game.input.onTouchStart/Move/End`. Command-card slots on phones are ~55x36 CSS px, MiniButtons were enlarged for touch only. Possible next steps: Play Store via TWA (Bubblewrap), bigger touch layout after the WC3-style HUD rework.
 - Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music/SFX and settings, client auto-reconnect, `npm audit` warnings.

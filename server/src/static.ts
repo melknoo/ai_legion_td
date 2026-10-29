@@ -7,6 +7,7 @@ const TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
@@ -35,13 +36,14 @@ export function serveClient(root: string) {
       file = path.join(dir, 'index.html');
     }
     // Vite fingerprints its bundles, so those can be cached for good; the page itself must stay
-    // fresh. The ~1900 sprite PNGs are not fingerprinted: a day at the CDN, an hour in the browser,
+    // fresh, and so must the service worker and app manifest (else the CDN keeps an old one for a
+    // day). The ~1900 sprite PNGs are not fingerprinted: a day at the CDN, an hour in the browser,
     // else every visit pulls them all through the home uplink again.
     const ext = path.extname(file);
     const immutable = url.startsWith('/assets/') && /-[\w-]{8,}\./.test(url);
     const cache = immutable
       ? 'public, max-age=31536000, immutable'
-      : ext === '.html'
+      : ext === '.html' || ext === '.webmanifest' || url === '/sw.js'
         ? 'no-cache'
         : 'public, max-age=3600, s-maxage=86400';
     const modified = fs.statSync(file).mtime;

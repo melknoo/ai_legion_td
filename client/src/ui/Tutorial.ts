@@ -3,6 +3,7 @@ import type { GameView } from '@legion/shared';
 import { FIELD_H, FIELD_TOP, VIEW_W } from '../layout.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window } from './ff6Window.ts';
+import { TOUCH } from './touch.ts';
 
 const TIPS_KEY = 'legion.tips';
 
@@ -32,6 +33,15 @@ interface Tip {
 
 const building = (g: GameView) => g.phase === 'build';
 const fighting = (g: GameView) => g.phase === 'fight';
+
+/** Touch wording for the tips that name keys or the mouse, by index in TIPS. */
+const TOUCH_LINES: Record<number, string[]> = {
+  0: ['BUILD FIGHTERS: TAP ONE ON THE', 'COMMAND CARD, THEN TAP A FREE', 'SPOT TWICE. HOLD A BUTTON: INFO.'],
+  2: ['WISPS GATHER LUMBER. LUMBER PAYS', 'FOR SENDS AND KING UPGRADES.'],
+  3: ['SENDS: BUY UNITS THAT ATTACK', 'THE FOE LANE NEXT WAVE. EACH ONE', 'RAISES YOUR INCOME.'],
+  6: ['TABS: WATCH OTHER LANES AND THE', 'KINGS. SWIPE THE FIELD TO PAN.'],
+  7: ['TAP ONE OF YOUR FIGHTERS TO', 'UPGRADE OR SELL IT. THE ? BUTTON', 'SHOWS THE DAMAGE TYPE CHART.'],
+};
 
 const TIPS: Tip[] = [
   { lines: ['BUILD FIGHTERS: PICK ONE ON THE', 'COMMAND CARD (OR Q-V), THEN CLICK', 'A FREE SPOT ON THE GRID.'], spot: { x: 2, y: 186, w: 178, h: 84 }, when: building },
@@ -69,13 +79,14 @@ export class Tutorial {
 
   private show(tip: Tip): void {
     const s = this.scene;
-    const w = Math.max(...tip.lines.map((l) => l.length), 24) * 8 + 16;
-    const h = tip.lines.length * 11 + 36;
+    const lines = (TOUCH && TOUCH_LINES[this.next]) || tip.lines;
+    const w = Math.max(...lines.map((l) => l.length), 24) * 8 + 16;
+    const h = lines.length * 11 + 36;
     const x = Math.round((VIEW_W - w) / 2);
     // Under the field label; only the checkbox and OK take clicks, the grid below stays usable.
     const y = FIELD_TOP + 13;
     const box = ff6Window(s, 0, 0, w, h);
-    const text = s.add.bitmapText(8, 7, FONT, tip.lines.join('\n')).setLineSpacing(3);
+    const text = s.add.bitmapText(8, 7, FONT, lines.join('\n')).setLineSpacing(3);
     const rowY = h - 17;
     const check = s.add.bitmapText(8, rowY, FONT, '');
     const ok = s.add.bitmapText(w - 28, rowY, FONT, 'OK').setTint(0xfff080);

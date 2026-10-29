@@ -2,16 +2,39 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Legion Pixel</title>
+    <meta name="description" content="Pixel tower defense with lanes, sends and kings. Solo against bots or online." />
+    <meta name="theme-color" content="#0b0b18" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Legion" />
     <style>
       html, body { margin: 0; height: 100%; background: #0b0b18; overflow: hidden; }
-      #game { width: 100%; height: 100%; }
+      /* dvh: mobile browser bars come and go; the game must fit the part that is visible. */
+      #game { width: 100%; height: 100%; height: 100dvh; }
       canvas { image-rendering: pixelated; }
+      /* Touch: no page scroll, pinch zoom, text selection or long-press menu over the game. */
+      body { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+      #rotate { display: none; }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate {
+          display: flex; position: fixed; inset: 0; z-index: 10; align-items: center; justify-content: center;
+          flex-direction: column; gap: 16px; background: #0b0b18; color: #e8e8f0;
+          font: bold 18px/1.4 monospace; text-align: center; letter-spacing: 1px;
+        }
+        #rotate .phone { width: 34px; height: 56px; border: 4px solid #ffd060; border-radius: 6px; animation: turn 1.6s ease-in-out infinite; }
+        @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate"><div class="phone"></div>TURN YOUR DEVICE<br />TO LANDSCAPE</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
