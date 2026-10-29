@@ -26,7 +26,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - Phaser re-dispatches queued key events; keyboard input is deduped in `client/src/ui/keys.ts`.
 - No pushback: enemies cannot shove a unit that is fighting (`engaged` set in `game.ts`). A test guards this.
 - Bosses (waves 10/20/30) take stuns/slows at `BOSS_CC_FACTOR` 0.25.
-- Hosting: the owner's home laptop behind a Cloudflare Tunnel (https://legion.schleiweb.de, `deploy/home/compose.yml`, `Dockerfile`); deploy with `npm run deploy` (`scripts/deploy-home.sh`), details in `docs/hosting.md`. Fly.io was dropped to save cost. The server serves `client/dist` when `CLIENT_DIR` is set, and the client connects to its own origin in production builds. One instance only: rooms are in memory. The image runs as `USER node` on a read-only root, so the server must not write outside `/tmp`.
+- Hosting: the owner's home laptop behind a Cloudflare Tunnel (https://legion.schleiweb.de, `deploy/home/compose.yml`, `Dockerfile`); deploy with `npm run deploy` (`scripts/deploy-home.sh`), details in `docs/hosting.md`. Fly.io was dropped to save cost. The server serves `client/dist` when `CLIENT_DIR` is set, and the client connects to its own origin in production builds. One instance only: rooms are in memory. The image runs as `USER node` on a read-only root, so the server must not write outside `/tmp` and the `/data` volume (game history). Monitoring (`/health`, `/stats`, `/client-error`, JSON logs) lives in `server/src/monitor.ts`, see `docs/hosting.md`.
 - Browser testing: a background/occluded Chrome window throttles `requestAnimationFrame`; use `?timeout&fast`.
 
 ## Verify
@@ -35,4 +35,5 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 ## Open
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
+- Mobile version: postponed by the owner. Landscape looks feasible (touch-drag camera, long-press instead of hover, fullscreen, DOM name input); best after the WC3-style HUD rework.
 - Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music/SFX and settings, client auto-reconnect, `npm audit` warnings.

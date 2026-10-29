@@ -11,6 +11,17 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m
+    # Finished games for /stats survive restarts and deploys.
+    volumes:
+      - legion-data:/data
+    environment:
+      STATS_FILE: /data/games.jsonl
+      # Password for https://legion.schleiweb.de/stats; empty keeps the page off.
+      STATS_TOKEN: ${STATS_TOKEN:-}
+    # JSON log lines (games, client errors); capped so they can't fill the disk.
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 768m
@@ -36,3 +47,6 @@ services:
 
 networks:
   tunnel: {}
+
+volumes:
+  legion-data: {}

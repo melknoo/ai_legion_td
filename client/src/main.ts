@@ -1,10 +1,14 @@
 import Phaser from 'phaser';
+import { installErrorReporting } from './errorReport.ts';
 import { CANVAS_H, CANVAS_W } from './layout.ts';
 import { BattleScene } from './scenes/BattleScene.ts';
 import { BootScene } from './scenes/BootScene.ts';
 import { LobbyScene } from './scenes/LobbyScene.ts';
 import { TitleScene } from './scenes/TitleScene.ts';
 import { UiScene } from './scenes/UiScene.ts';
+
+// The dev server has no /client-error next to the page; there the console is enough.
+if (import.meta.env.PROD) installErrorReporting();
 
 // Fill the window at the canvas aspect ratio; `image-rendering: pixelated` keeps the pixel art sharp
 // at fractional zooms (some pixels end up one screen pixel wider, which is hard to notice).

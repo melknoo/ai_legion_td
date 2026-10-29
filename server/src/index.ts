@@ -1,6 +1,7 @@
 import { defineRoom, defineServer } from 'colyseus';
 import { ROOM_NAME, SERVER_PORT } from '@legion/shared';
 import { LegionRoom } from './LegionRoom.ts';
+import { log, monitorRoutes } from './monitor.ts';
 import { serveClient } from './static.ts';
 
 const port = Number(process.env.PORT ?? SERVER_PORT);
@@ -11,8 +12,15 @@ const server = defineServer({
   rooms: {
     [ROOM_NAME]: defineRoom(LegionRoom),
   },
-  ...(clientDir ? { express: (app) => void app.use(serveClient(clientDir)) } : {}),
+  express: (app) => {
+    app.use(monitorRoutes());
+    if (clientDir) app.use(serveClient(clientDir));
+  },
 });
 
 server.listen(port);
-console.log(`Legion server listening on :${port}${clientDir ? ` (serving ${clientDir})` : ''}`);
+log('server.start', { port, clientDir: clientDir ?? null });
+process.on('uncaughtException', (err) => {
+  log('server.crash', { error: err.message, stack: err.stack });
+  process.exit(1);
+});

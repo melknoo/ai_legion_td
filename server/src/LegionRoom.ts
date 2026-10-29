@@ -20,6 +20,7 @@ import {
   type PlayerCommand,
   type TeamId,
 } from '@legion/shared';
+import { monitor } from './monitor.ts';
 import { NetPlayer, NetState, NetUnit } from './schema.ts';
 
 const COMMANDS = new Set(['build', 'upgrade', 'sell', 'sendMerc', 'buyWorker', 'upgradeKing', 'upgradeFarm', 'reroll']);
@@ -46,6 +47,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     this.state.status = 'lobby';
     this.state.mode = 'ap';
     this.state.winner = -1;
+    monitor.roomCreated(this.roomId);
     if (options.fast) {
       this.data = { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0 } };
     }
@@ -110,6 +112,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     this.applyMode(p);
     this.state.players.push(p);
     if (!this.state.host) this.state.host = client.sessionId;
+    this.reportPlayers();
   }
 
   override async onLeave(client: Client): Promise<void> {
@@ -119,20 +122,34 @@ export class LegionRoom extends Room<{ state: NetState }> {
     if (this.inLobby()) {
       this.state.players.splice(index, 1);
       if (this.state.host === client.sessionId) this.state.host = this.state.players.find((q) => !q.bot)?.sessionId ?? '';
+      this.reportPlayers();
       return;
     }
     // Mid-game: keep the seat for a while; a bot plays it meanwhile.
     p.connected = false;
+    this.reportPlayers();
     try {
       await this.allowReconnection(client, 60);
       p.connected = true;
     } catch {
       p.bot = true;
     }
+    this.reportPlayers();
   }
 
   override onDispose(): void {
     if (this.timer) clearInterval(this.timer);
+    // Closed while the game still ran: everyone left.
+    if (this.game && this.game.phase !== 'over') monitor.gameEnded(this.roomId, { wave: this.game.wave, winner: null, abandoned: true, builders: this.builders() });
+    monitor.roomDisposed(this.roomId);
+  }
+
+  private reportPlayers(): void {
+    monitor.players(this.roomId, this.state.players.filter((p) => !p.bot && p.connected).length);
+  }
+
+  private builders(): string[] {
+    return this.state.players.map((p) => p.builder);
   }
 
   // ---- game ----------------------------------------------------------------
@@ -157,6 +174,12 @@ export class LegionRoom extends Room<{ state: NetState }> {
       players: players.map((p, i) => ({ id: p.sessionId || `bot${i}`, name: p.name, team: p.team as TeamId, builder: p.builder })),
     });
     this.state.status = 'playing';
+    monitor.gameStarted(this.roomId, {
+      mode: this.state.mode,
+      humans: players.filter((p) => !p.bot).length,
+      bots: players.filter((p) => p.bot).length,
+      builders: this.builders(),
+    });
     void this.lock();
     this.syncState();
     this.timer = setInterval(() => this.tick(), TICK_MS);
@@ -170,6 +193,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     });
     this.pending.push(...game.tick());
     this.syncState();
+    monitor.wave(this.roomId, game.wave);
     if (++this.ticks % EVENT_EVERY === 0 && this.pending.length) {
       this.broadcast('ev', encodeEvents(this.pending), { afterNextPatch: true });
       this.pending = [];
@@ -180,6 +204,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
       this.timer = null;
       if (this.pending.length) this.broadcast('ev', encodeEvents(this.pending), { afterNextPatch: true });
       this.pending = [];
+      monitor.gameEnded(this.roomId, { wave: game.wave, winner: game.winner, abandoned: false, builders: this.builders() });
     }
   }
 

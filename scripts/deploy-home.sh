@@ -25,9 +25,9 @@ ssh "$HOST" "cd ~/$DIR/deploy/home && docker compose up -d --build --remove-orph
 
 echo "== check"
 for _ in $(seq 1 20); do
-  ssh "$HOST" "curl -sf -o /dev/null http://127.0.0.1:8080/" && break
+  ssh "$HOST" "curl -sf -o /dev/null http://127.0.0.1:8080/health" && break
   sleep 1
 done
-ssh "$HOST" "curl -sf -o /dev/null http://127.0.0.1:8080/" || { echo "game container does not answer"; exit 1; }
+ssh "$HOST" "curl -sf -o /dev/null http://127.0.0.1:8080/health" || { echo "game container does not answer"; exit 1; }
 echo "public: $(curl -s -o /dev/null -w '%{http_code}' "$URL" || true) $URL"
 echo "done. Changed existing sprites? Purge the Cloudflare cache (docs/hosting.md)."

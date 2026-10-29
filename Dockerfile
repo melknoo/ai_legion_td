@@ -16,7 +16,10 @@ RUN npm run build -w @legion/client
 
 ENV NODE_ENV=production PORT=8080 CLIENT_DIR=/app/client/dist
 EXPOSE 8080
+# Game history for the stats page; a volume mounted here inherits the node owner.
+RUN mkdir -p /data && chown node:node /data
 WORKDIR /app/server
-# No root at runtime: the game only reads its files (tsx keeps its cache in /tmp).
+# No root at runtime: the game only reads its files (tsx keeps its cache in /tmp) and
+# writes nothing but the history in /data.
 USER node
 CMD ["npx", "tsx", "src/index.ts"]

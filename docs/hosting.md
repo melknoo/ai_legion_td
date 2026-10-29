@@ -31,3 +31,16 @@ curl -s -o /dev/null -w '%{http_code}\n' https://legion.schleiweb.de/
 ```
 
 `cloudflared` should log "Registered tunnel connection" (four connections, Frankfurt). If the home DNS has cached a miss for a new hostname, test with `--resolve` or another resolver.
+
+## Monitoring
+All in `server/src/monitor.ts`, no external service needed:
+
+- **`GET /health`** (public): `{ ok, uptimeS, rooms, playing, players }`. The deploy script checks it. For alerts when the site is down, point a free uptime checker (e.g. UptimeRobot or healthchecks.io, the owner's account) at `https://legion.schleiweb.de/health`.
+- **`GET /stats`**: HTML page with open rooms, recent games, games per day, builder picks and recent client errors. Protected by HTTP basic auth (any user name, password `STATS_TOKEN` from `deploy/home/.env`); without `STATS_TOKEN` it answers 404. Finished games are appended to `/data/games.jsonl` in the `legion-data` volume, so the tables survive deploys; the counters at the top restart with the container.
+- **`POST /client-error`**: production clients report uncaught errors here (`client/src/errorReport.ts`, at most 5 per page load; the server takes 10 per minute per IP and 4 KB per report).
+- **Logs**: the server writes one JSON line per event (`server.start`, `room.create`, `game.start`, `game.end`, `game.abandon`, `room.dispose`, `client.error`, `server.crash`). Docker keeps 3 × 10 MB.
+
+```sh
+ssh legion-home 'docker logs --tail 50 legion-legion-1'
+ssh legion-home 'docker logs legion-legion-1 2>&1 | grep client.error'
+```
