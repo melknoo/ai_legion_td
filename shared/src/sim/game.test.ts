@@ -313,7 +313,7 @@ describe('wire protocol', () => {
   it('round-trips visual events', async () => {
     const { decodeEvents, encodeEvents } = await import('../net/protocol.ts');
     const events: GameEvent[] = [
-      { type: 'attack', unitId: 3, targetId: 9 },
+      { type: 'attack', unitId: 3, targetId: 9, x: 100, y: 40 },
       { type: 'damage', sourceId: 3, targetId: 9, amount: 12, area: 1, x: 100, y: 40 },
       { type: 'death', unitId: 9, killerId: null, area: 1, x: 100, y: 40 },
       { type: 'leak', unitId: 5, player: 2 },

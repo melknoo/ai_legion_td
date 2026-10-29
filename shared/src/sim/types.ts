@@ -9,6 +9,9 @@ export type KingStat = 'hp' | 'attack' | 'regen';
 
 export type DamageTable = Record<AttackType, Record<ArmorType, number>>;
 
+/** Attacks at or below this reach count as melee (180–200 are big melee units such as giants and lancers). */
+export const MELEE_RANGE = 200;
+
 export interface AttackDef {
   /** Inclusive damage roll range before modifiers. */
   damage: [number, number];

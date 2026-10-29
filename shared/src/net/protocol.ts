@@ -75,7 +75,7 @@ export function encodeEvents(events: readonly GameEvent[]): WireEvent[] {
   for (const e of events) {
     switch (e.type) {
       case 'attack':
-        out.push([ATTACK, e.unitId, e.targetId]);
+        out.push([ATTACK, e.unitId, e.targetId, Math.round(e.x), Math.round(e.y)]);
         break;
       case 'damage':
         out.push([DAMAGE, e.sourceId, e.targetId, Math.round(e.amount), e.area, Math.round(e.x), Math.round(e.y)]);
@@ -111,7 +111,7 @@ export function decodeEvents(wire: readonly WireEvent[]): GameEvent[] {
     const [code, a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = w;
     switch (code) {
       case ATTACK:
-        out.push({ type: 'attack', unitId: a, targetId: b });
+        out.push({ type: 'attack', unitId: a, targetId: b, x: c, y: d });
         break;
       case DAMAGE:
         out.push({ type: 'damage', sourceId: a, targetId: b, amount: c, area: d, x: e, y: f });

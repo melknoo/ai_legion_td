@@ -1,7 +1,7 @@
 import { computeDamage } from './damage.ts';
 import { ARENA, CELL, LANE, cellCenter, isValidCell } from './geometry.ts';
 import { Rng } from './rng.ts';
-import type { GameData, KingStat, Phase, TeamId, UnitDef, UnitKind } from './types.ts';
+import { MELEE_RANGE, type GameData, type KingStat, type Phase, type TeamId, type UnitDef, type UnitKind } from './types.ts';
 import type { GameView } from './view.ts';
 import { STATUS, type AbilityDef, type AuraStat, type Buff, type BuffKind, type EffectKind } from './abilities.ts';
 
@@ -103,7 +103,8 @@ export type GameEvent =
   | { type: 'phase'; phase: Phase; wave: number; endsAtMs: number }
   | { type: 'spawn'; unitId: number }
   | { type: 'remove'; unitId: number }
-  | { type: 'attack'; unitId: number; targetId: number }
+  /** x/y: the target's position, since a killing blow removes the target before clients see the event. */
+  | { type: 'attack'; unitId: number; targetId: number; x: number; y: number }
   // Damage and death carry the position so clients can show effects even if the unit is already gone.
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; area: number; x: number; y: number }
   | { type: 'death'; unitId: number; killerId: number | null; area: number; x: number; y: number }
@@ -119,8 +120,6 @@ export type CommandResult = { ok: true } | { ok: false; error: string };
 
 const NO_MODS: UnitMods = { hp: 0, damage: 0, regen: 0, armor: 0, attackSpeed: 0 };
 const NO_AURA: Record<AuraStat, number> = { damage: 0, armor: 0, attackSpeed: 0, regen: 0 };
-/** Attacks at or below this reach count as melee (thorns). */
-const MELEE_RANGE = 150;
 /** Poison deals its damage in steps of this length. */
 /** Bosses keep stuns and slows only this long (the original: "reduced greatly on bosses"). */
 const BOSS_CC_FACTOR = 0.25;
@@ -639,7 +638,7 @@ export class Game implements GameView {
     if (u.cooldownMs > 0) return;
     const speed = 1 + u.mods.attackSpeed + this.aura(u).attackSpeed - slow;
     u.cooldownMs = def.attack.cooldownMs / Math.max(0.2, speed);
-    this.events.push({ type: 'attack', unitId: u.id, targetId: target.id });
+    this.events.push({ type: 'attack', unitId: u.id, targetId: target.id, x: target.x, y: target.y });
     this.hit(u, target);
     // Multishot: extra enemies within reach take a weaker hit.
     for (const a of this.abilitiesOf(u)) {
@@ -651,7 +650,7 @@ export class Game implements GameView {
         .sort((p, q) => p.d - q.d)
         .slice(0, a.targets);
       for (const { o } of extra) {
-        this.events.push({ type: 'attack', unitId: u.id, targetId: o.id });
+        this.events.push({ type: 'attack', unitId: u.id, targetId: o.id, x: o.x, y: o.y });
         this.hit(u, o, a.ratio, false);
       }
     }

@@ -1,5 +1,6 @@
 import type { Command, Game } from './game.ts';
 import { LANE } from './geometry.ts';
+import { MELEE_RANGE } from './types.ts';
 
 /**
  * Simple opponent: builds and upgrades between waves, buys a few wisps, sends mercs and
@@ -55,11 +56,10 @@ export function botCommands(game: Game, player: number): Command[] {
   const pool = foodLeft <= 4 ? affordable : affordable.filter((id) => cost(id) <= p.gold / 2);
   const unit = [...(pool.length ? pool : affordable)].sort((a, b) => cost(b) * fit(b) - cost(a) * fit(a))[0];
   if (!unit) return [];
-  const cell = freeCell(own, game.data.units[unit]!.attack.range > MELEE);
+  const cell = freeCell(own, game.data.units[unit]!.attack.range > MELEE_RANGE);
   return cell ? [{ type: 'build', player, unit, ...cell }] : [];
 }
 
-const MELEE = 150;
 /** Middle rows first, so the line holds where the creeps walk. */
 const ROWS = Array.from({ length: LANE.gridRows }, (_, i) => i).sort(
   (a, b) => Math.abs(a - (LANE.gridRows - 1) / 2) - Math.abs(b - (LANE.gridRows - 1) / 2),

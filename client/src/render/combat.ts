@@ -1,9 +1,6 @@
 import Phaser from 'phaser';
-import type { AttackType, UnitDef } from '@legion/shared';
+import { MELEE_RANGE, type AttackType, type UnitDef } from '@legion/shared';
 import type { WeaponKey } from '../assets/manifest.ts';
-
-/** Reach above which an attack counts as ranged (world units). */
-export const RANGED = 150;
 
 /** Per-unit animation offsets the scene adds on top of the simulated position. */
 export interface Recoil {
@@ -11,6 +8,8 @@ export interface Recoil {
   lunge: number;
   /** Squash factor for sprites without attack frames (1 = none). */
   squash: number;
+  /** Vertical offset in pixels (hop of sprites without attack frames). */
+  hop: number;
 }
 
 const MELEE_WEAPON: Record<AttackType, WeaponKey> = {
@@ -18,24 +17,38 @@ const MELEE_WEAPON: Record<AttackType, WeaponKey> = {
 };
 
 export function weaponFor(def: UnitDef): WeaponKey | null {
-  if (def.attack.range <= RANGED) return MELEE_WEAPON[def.attack.type];
+  if (def.attack.range <= MELEE_RANGE) return MELEE_WEAPON[def.attack.type];
   if (def.attack.type === 'pierce' || def.attack.type === 'normal') return 'bow';
   if (def.attack.type === 'magic' || def.attack.type === 'chaos') return 'wand';
   return null; // siege engines just fire
 }
 
-/** Melee lunges towards the target, ranged attackers recoil; then both settle back. */
-export function bodyMotion(scene: Phaser.Scene, r: Recoil, dir: number, ranged: boolean, squash: boolean): void {
+/**
+ * Melee rams into the target (fast in, slow back), ranged attackers recoil.
+ * Sprites without attack frames (monsters) also hop and squash. Returns the peak lunge in pixels.
+ */
+export function bodyMotion(scene: Phaser.Scene, r: Recoil, dir: number, ranged: boolean, pounce: boolean): number {
   scene.tweens.killTweensOf(r);
   r.lunge = 0;
   r.squash = 1;
-  scene.tweens.add({ targets: r, lunge: ranged ? -2 * dir : 4 * dir, duration: 70, yoyo: true, ease: 'Quad.easeOut' });
-  if (squash) scene.tweens.add({ targets: r, squash: 0.75, duration: 80, yoyo: true, ease: 'Quad.easeOut' });
+  r.hop = 0;
+  const lunge = (ranged ? -2 : 8) * dir;
+  scene.tweens.add({
+    targets: r,
+    lunge,
+    duration: ranged ? 70 : 60,
+    ease: 'Quad.easeIn',
+    onComplete: () => scene.tweens.add({ targets: r, lunge: 0, duration: ranged ? 70 : 160, ease: 'Quad.easeOut' }),
+  });
+  if (!pounce) return lunge;
+  scene.tweens.add({ targets: r, hop: ranged ? -2 : -4, duration: 90, yoyo: true, ease: 'Quad.easeOut' });
+  scene.tweens.add({ targets: r, squash: 0.7, duration: 60, yoyo: true, delay: 60, ease: 'Quad.easeOut' });
+  return lunge;
 }
 
 /** A weapon in the attacker's hand: swung for melee, raised and drawn for ranged. */
-export function weaponSwing(scene: Phaser.Scene, key: WeaponKey, x: number, y: number, dir: number): void {
-  const w = scene.add.image(Math.round(x + 5 * dir), Math.round(y - 7), `wpn-${key}`).setDepth(y + 1).setFlipX(dir < 0);
+export function weaponSwing(scene: Phaser.Scene, key: WeaponKey, x: number, y: number, dir: number, depth: number): void {
+  const w = scene.add.image(Math.round(x + 5 * dir), Math.round(y - 7), `wpn-${key}`).setDepth(depth).setFlipX(dir < 0);
   if (key === 'bow') {
     // Bow stands upright with the arc facing the target; the "draw" squeezes it.
     w.setRotation((Math.PI / 2) * dir).setScale(1, 1);
@@ -44,18 +57,38 @@ export function weaponSwing(scene: Phaser.Scene, key: WeaponKey, x: number, y: n
   }
   if (key === 'wand') {
     w.setOrigin(0.5, 1).setRotation(-0.6 * dir);
-    scene.tweens.add({ targets: w, rotation: 0.5 * dir, duration: 110, yoyo: true, onComplete: () => w.destroy() });
+    scene.tweens.add({ targets: w, rotation: 0.5 * dir, duration: 150, yoyo: true, onComplete: () => w.destroy() });
     return;
   }
-  // Swing from raised-behind to forward-down around the hilt.
-  w.setOrigin(0.5, 1).setRotation(-0.9 * dir);
+  // Swing from raised-behind to forward-down around the hilt, hold, then fade; a crescent trails the tip.
+  const from = -0.9 * dir;
+  const to = 1.9 * dir;
+  w.setOrigin(0.5, 1).setRotation(from);
+  const trail = scene.add.graphics().setDepth(depth - 0.5).setBlendMode(Phaser.BlendModes.ADD);
+  const reach = w.displayHeight;
   scene.tweens.add({
     targets: w,
-    rotation: 1.9 * dir,
-    duration: 140,
+    rotation: to,
+    duration: 250,
     ease: 'Quad.easeIn',
-    onComplete: () => scene.tweens.add({ targets: w, alpha: 0, duration: 80, onComplete: () => w.destroy() }),
+    onUpdate: () => swingTrail(trail, w.x, w.y, reach, from, w.rotation, dir),
+    onComplete: () => {
+      scene.tweens.add({ targets: trail, alpha: 0, duration: 160, onComplete: () => trail.destroy() });
+      scene.tweens.add({ targets: w, alpha: 0, delay: 120, duration: 100, onComplete: () => w.destroy() });
+    },
   });
+}
+
+/** Crescent swept by the weapon tip from `from` to `now` (sprite rotations; 0 points up). */
+function swingTrail(g: Phaser.GameObjects.Graphics, x: number, y: number, reach: number, from: number, now: number, dir: number): void {
+  const start = from - Math.PI / 2;
+  const end = now - Math.PI / 2;
+  const back = dir < 0;
+  g.clear();
+  g.lineStyle(3, 0xffffff, 0.5).beginPath().arc(x, y, reach - 1, start, end, back).strokePath();
+  // A brighter edge on the last stretch, just behind the tip.
+  const edge = back ? Math.min(start, end + 1.2) : Math.max(start, end - 1.2);
+  g.lineStyle(1, 0xffffff, 0.9).beginPath().arc(x, y, reach, edge, end, back).strokePath();
 }
 
 /** Projectile flying from attacker to target; style follows the attack type. */

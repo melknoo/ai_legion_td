@@ -378,7 +378,7 @@ export class Hud {
         return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `REROLLS ALL SIX\n${left}/${r.prophet.rerolls} LEFT`);
       } else {
         const id = me.fighters[h.index];
-        const how = g.phase === 'build' ? 'CLICK, THEN PLACE\nSHIFT: PLACE MANY' : 'BUILD AFTER WAVE';
+        const how = g.phase === 'build' ? '' : 'BUILD AFTER WAVE';
         if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${g.data.units[id]?.goldCost}G`, 'fighter', how);
       }
     }

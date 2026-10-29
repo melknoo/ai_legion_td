@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import { ARENA, CELL, LANE, LEGION_DATA, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
+import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM, SCALE, UI_ZOOM, VIEW_W } from '../layout.ts';
-import { RANGED, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
+import { bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
 import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
@@ -24,6 +24,8 @@ const PAN_SPEED = 220;
 /** Nova effects by ability name, else by the caster's attack type. */
 const NOVA_FX: Record<string, FxKey> = { Torrent: 'waterpillar', Shockwave: 'rockspike', 'Royal Stomp': 'rockspike', 'Plague Cloud': 'magic' };
 const GLOW_FX = new Set<FxKey>(['explosion', 'spark', 'magic', 'boost', 'thunder', 'cut']);
+/** Pause between two hit flashes on the same unit. */
+const FLASH_GAP_MS = 250;
 const NOVA_FX_BY_TYPE: Record<AttackType, FxKey> = { normal: 'rockspike', pierce: 'frost', siege: 'explosion', magic: 'magic', chaos: 'flame' };
 
 interface UnitView {
@@ -31,6 +33,10 @@ interface UnitView {
   shadow: Phaser.GameObjects.Ellipse;
   hp: Phaser.GameObjects.Graphics;
   lastX: number;
+  /** Smoothed horizontal speed (px per frame); crowd jostling stays below the walk threshold. */
+  speed: number;
+  /** Until then the unit holds its attack pose (characters) or bites fast (monsters). */
+  attackUntil: number;
   facingRight: boolean;
   flashUntil: number;
   /** Base sprite scale from the manifest. */
@@ -467,13 +473,14 @@ export class BattleScene extends Phaser.Scene {
       const s = this.toField(pos.x, pos.y);
       const dx = s.x - view.lastX;
       if (Math.abs(dx) > 0.05) view.facingRight = dx > 0;
-      const moving = Math.abs(dx) > 0.01;
+      view.speed += (Math.abs(dx) - view.speed) * 0.3;
+      const moving = view.speed > 0.1;
       view.lastX = s.x;
-      const { lunge, squash } = view.recoil;
+      const { lunge, squash, hop } = view.recoil;
       view.sprite
-        .setPosition(Math.round(s.x + lunge), Math.round(s.y))
+        .setPosition(Math.round(s.x + lunge), Math.round(s.y + hop))
         .setScale(view.scale * (2 - squash), view.scale * squash)
-        .setDepth(10 + s.y);
+        .setDepth(this.unitDepth(u, view, s.y));
       view.shadow.setPosition(Math.round(s.x + lunge), Math.round(s.y) + 1).setDepth(9 + s.y);
       view.ring?.setPosition(Math.round(s.x + lunge), Math.round(s.y)).setDepth(8 + s.y);
       this.animate(u, view, moving);
@@ -504,9 +511,14 @@ export class BattleScene extends Phaser.Scene {
     }
     const hp = this.add.graphics();
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, hp, def: u.def, lastX: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1 } };
+    const view = { sprite, shadow, ring, hp, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
+  }
+
+  /** Fighters step in front of the crowd while they strike, so a swarmed tank's attacks stay visible. */
+  private unitDepth(u: UnitState, view: UnitView, y: number): number {
+    return 10 + y + (u.kind === 'fighter' && this.time.now < view.attackUntil ? 500 : 0);
   }
 
   private destroyView(id: number, view: UnitView): void {
@@ -524,20 +536,26 @@ export class BattleScene extends Phaser.Scene {
     const sprite = view.sprite;
     // Character sheets face left, monster sheets face right.
     sprite.setFlipX(spec.kind === 'character' ? view.facingRight : !view.facingRight);
+    const attacking = this.time.now < view.attackUntil;
     if (spec.kind === 'monster') {
       sprite.setAlpha(u.dead ? 0.4 : 1);
       if (sprite.anims.currentAnim?.key !== `${spriteKey(spec)}-walk`) sprite.play(`${spriteKey(spec)}-walk`);
+      // No attack frames: the walk cycle runs fast while biting.
+      sprite.anims.timeScale = attacking ? 3 : 1;
       return;
     }
     if (u.dead) {
       sprite.anims.stop();
       sprite.setTexture(`${spriteKey(spec)}-Dead`, 0).setAlpha(0.6);
-    } else if (moving) {
+    } else if (moving && !attacking) {
       sprite.setAlpha(1);
       if (sprite.anims.currentAnim?.key !== `${spriteKey(spec)}-walk`) sprite.play(`${spriteKey(spec)}-walk`);
-    } else if (sprite.texture.key !== `${spriteKey(spec)}-Attack`) {
-      sprite.anims.stop();
-      sprite.setAlpha(1).setTexture(`${spriteKey(spec)}-Idle`, DIR.left);
+    } else {
+      const pose = `${spriteKey(spec)}-${attacking ? 'Attack' : 'Idle'}`;
+      if (sprite.texture.key !== pose) {
+        sprite.anims.stop();
+        sprite.setAlpha(1).setTexture(pose, DIR.left);
+      }
     }
   }
 
@@ -561,11 +579,11 @@ export class BattleScene extends Phaser.Scene {
     const game = this.session.game;
     switch (ev.type) {
       case 'attack': {
+        // The target may already be gone (killing blow), so aim at the position the event carries.
         const a = game.units.get(ev.unitId);
-        const t = game.units.get(ev.targetId);
-        if (!a || !t || a.area !== this.viewArea) return;
+        if (!a || a.area !== this.viewArea) return;
         const from = this.toField(a.x, a.y);
-        const to = this.toField(t.x, t.y);
+        const to = this.toField(ev.x, ev.y);
         const view = this.views.get(a.id);
         if (!view) return;
         const dir = to.x >= from.x ? 1 : -1;
@@ -577,28 +595,32 @@ export class BattleScene extends Phaser.Scene {
           return;
         }
         const def = game.def(a);
-        const ranged = def.attack.range > RANGED;
+        const ranged = def.attack.range > MELEE_RANGE;
         const spec = UNIT_SPRITES[a.def];
         const character = spec?.kind === 'character';
-        bodyMotion(this, view.recoil, dir, ranged, !character);
+        const lunge = bodyMotion(this, view.recoil, dir, ranged, !character);
+        // animate() holds the pose (characters) or the fast bite cycle (monsters) until then.
+        view.attackUntil = this.time.now + 220;
         if (character) {
           // Attack pose plus a visible weapon, since the sheets have a single attack frame.
-          view.sprite.anims.stop();
-          view.sprite.setTexture(`${spriteKey(spec)}-Attack`, DIR.left);
-          this.time.delayedCall(180, () => view.sprite.active && view.sprite.setTexture(`${spriteKey(spec)}-Idle`, DIR.left));
           const weapon = weaponFor(def);
-          if (weapon) weaponSwing(this, weapon, Math.round(from.x + view.recoil.lunge), Math.round(from.y), dir);
+          if (weapon) weaponSwing(this, weapon, Math.round(from.x + lunge), Math.round(from.y), dir, this.unitDepth(a, view, from.y) + 1);
         }
         if (ranged) projectile(this, def.attack.type, from.x + 6 * dir, from.y - 8, to.x, to.y - 6);
-        else this.playFx('cut', to.x, to.y - 6);
+        // Monster fighters carry no weapon, so their bite gets the bigger claw mark;
+        // creeps keep the small one so a swarm doesn't bury what it is chewing on.
+        else this.playFx(!character && a.kind === 'fighter' ? 'cutx' : 'cut', to.x, to.y - 6);
         return;
       }
       case 'damage': {
         const t = game.units.get(ev.targetId);
         const view = this.views.get(ev.targetId);
         if (!t || !view || t.area !== this.viewArea) return;
-        view.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-        view.flashUntil = this.time.now + 70;
+        // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
+        if (this.time.now > view.flashUntil + FLASH_GAP_MS) {
+          view.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+          view.flashUntil = this.time.now + 70;
+        }
         const s = this.toField(t.x, t.y);
         this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
         return;
