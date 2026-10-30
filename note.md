@@ -1,6 +1,3 @@
--soundeffekte?
--optionsmenü, sound an aus usw?
--wenn einheiten platziert werden sind sie immer in die falsche richtung gedreht
--man bräuchte noch einen hotkey um sofort zu seiner base zurück zu kommen. Zur Zeit muss man so lange tab drücken bis man wieder bei sich selbst angekommen ist.
--wo hast du die vfx für die nova her? Gibt es noch mehr so welche? An den vfx für die einzelnen attacken könnte man noch arbeiten, da die beim ursprünglichen game auch für jede einheit unterschiedlich sind. So kann man auch besser zwischen den Einheiten unterscheiden.
--kings hp wird nach jedem leak nach jeder wave resetet. Die sollten da bleiben wo sie waren es sei denn natürlich man hat king regen geupgradet.
+-chat
+-einheiten sollen bei platzieren und vor kampfbeginn nicht mehr nach links gucken sondern nach unten
+-besseres tutorial, neue spieler wissen nicht wer sie sind oder was abgeht.
