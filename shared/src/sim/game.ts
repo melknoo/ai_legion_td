@@ -213,8 +213,10 @@ export class Game implements GameView {
       this.timeMs += TICK_MS;
       this.gatherLumber();
       if (this.phase === 'build') {
+        this.regenKings();
         if (this.timeMs >= this.phaseEndsAtMs) this.startFight();
       } else if (this.phase === 'arena') {
+        this.regenKings();
         this.stepArena();
       } else {
         this.stepFight();
@@ -466,11 +468,11 @@ export class Game implements GameView {
     this.events.push({ type: 'phase', phase: 'build', wave: this.wave, endsAtMs: this.phaseEndsAtMs });
   }
 
-  /** Fighters and kings come back unharmed and in place. */
+  /** Fighters come back unharmed and in place; kings keep their wounds and only regenerate. */
   private restoreUnits(): void {
     for (const u of this.units.values()) {
       u.dead = false;
-      u.hp = u.maxHp;
+      if (u.kind !== 'king') u.hp = u.maxHp;
       u.area = u.homeArea;
       u.x = u.homeX;
       u.y = u.homeY;
@@ -479,6 +481,16 @@ export class Game implements GameView {
       u.buffs = [];
       u.readyAt = [];
       u.status = 0;
+    }
+  }
+
+  /** Kings regenerate outside fights too (fights tick regen for every unit in stepFight). */
+  private regenKings(): void {
+    const dt = TICK_MS / 1000;
+    for (const team of [0, 1] as const) {
+      const king = this.king(team);
+      const regen = (this.def(king).hpRegen ?? 0) + king.mods.regen;
+      if (regen) king.hp = Math.min(king.maxHp, king.hp + regen * dt);
     }
   }
 

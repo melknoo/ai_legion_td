@@ -118,10 +118,29 @@ export const FX = {
   boost: fx('Magic/Boost/SpriteSheet.png', 53, 35, 8),
   magic: fx('Magic/Spark/SpriteSheet.png', 27, 35, 10),
   flame: fx('Elemental/Flam/SpriteSheet.png', 25, 30, 8),
+  claw: fx('Attack/Claw/SpriteSheet.png', 32, 32, 4),
+  clawdouble: fx('Attack/ClawDouble/SpriteSheet.png', 32, 32, 4),
+  cutdouble: fx('Attack/CutDouble/SpriteSheet.png', 32, 32, 5),
+  slashcurved: fx('Attack/SlashCurved/SpriteSheet.png', 32, 32, 4),
+  plant: fx('Elemental/Plant/SpriteSheet.png', 30, 28, 8),
+  rock: fx('Elemental/Rock/SpriteSheet.png', 30, 30, 14),
+  water: fx('Elemental/Water/SpriteSheet.png', 40, 33, 11),
+  ice: fx('Elemental/Ice/SpriteSheet.png', 32, 32, 10),
+  spirit: fx('Magic/Spirit/SpriteSheet.png', 32, 32, 5),
+  holy: fx('Magic/Circle/SpriteSheetOrange.png', 32, 32, 4),
 };
 export type FxKey = keyof typeof FX;
 
+/** Sound effects (Audio/Sounds and Jingles of the pack, converted to mono mp3). */
+export const SOUNDS = [
+  'hit', 'impact', 'slash', 'shoot', 'magic', 'fire', 'explosion', 'water', 'grass', 'death',
+  'build', 'sell', 'upgrade', 'coin', 'leak', 'wave', 'nova', 'stun', 'heal', 'click', 'error', 'win', 'lose',
+] as const;
+export type SoundKey = (typeof SOUNDS)[number];
+export const soundPath = (key: SoundKey) => `${BASE}/Audio/${key}.mp3`;
+
 export const ARROW_PATH = `${BASE}/FX/Projectile/Arrow.png`;
+export const KUNAI_PATH = `${BASE}/FX/Projectile/Kunai.png`;
 
 /** Hand-held weapons shown during attacks (the character sheets only have one attack pose). */
 export const WEAPONS = {
@@ -135,11 +154,18 @@ export const WEAPONS = {
 export type WeaponKey = keyof typeof WEAPONS;
 
 /** Animated projectiles (16x16 frames); pierce uses the static arrow. */
+/** Projectile strips: frame width/height and frame count. */
+const proj = (file: string, w: number, h: number, frames: number) => ({ path: `${BASE}/FX/Projectile/${file}`, w, h, frames });
 export const PROJECTILES = {
-  magic: { path: `${BASE}/FX/Projectile/EnergyBall.png`, frames: 4 },
-  chaos: { path: `${BASE}/FX/Projectile/Fireball.png`, frames: 4 },
-  siege: { path: `${BASE}/FX/Projectile/CanonBall.png`, frames: 5 },
-} as const;
+  energy: proj('EnergyBall.png', 16, 16, 4),
+  fireball: proj('Fireball.png', 16, 16, 4),
+  cannon: proj('CanonBall.png', 16, 16, 5),
+  rock: proj('SpriteSheetRock.png', 16, 16, 4),
+  icespike: proj('IceSpike.png', 18, 10, 8),
+  plantspike: proj('PlantSpike.png', 24, 20, 4),
+  shuriken: proj('Shuriken.png', 16, 16, 2),
+};
+export type ProjKey = keyof typeof PROJECTILES;
 
 const SKILL = `${BASE}/Ui/Skill Icon`;
 /** HUD icons: small inline ones and 24x24 button icons. Paths contain spaces and '&'. */

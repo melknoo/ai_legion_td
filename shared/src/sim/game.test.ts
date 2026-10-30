@@ -109,7 +109,21 @@ describe('waves', () => {
     expect(events.some((e) => e.type === 'damage' && e.targetId === king.id)).toBe(true);
     const aliceFighters = new Set(fightersOf(g, 0).map((f) => f.id));
     expect(events.some((e) => e.type === 'warp' && aliceFighters.has(e.unitId))).toBe(true);
-    expect(king.hp).toBe(king.maxHp);
+    // Leak damage carries over into the next wave.
+    expect(king.hp).toBeLessThan(king.maxHp);
+  });
+
+  it('kings regenerate during the build phase, faster with regen upgrades', () => {
+    const g = newGame();
+    defend(g, 0);
+    runUntil(g, phaseIs('build'));
+    const [slow, fast] = [g.king(0), g.king(1)];
+    slow.hp = fast.hp = 1000;
+    g.players[1]!.lumber = 1000;
+    g.apply({ type: 'upgradeKing', player: 1, stat: 'regen' });
+    for (let i = 0; i < 20; i++) g.tick(); // 1 s
+    expect(slow.hp).toBeCloseTo(1000 + 5);
+    expect(fast.hp).toBeCloseTo(1000 + 5 + 5);
   });
 
   it('buffs both kings every buffEvery waves', () => {

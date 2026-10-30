@@ -1,8 +1,11 @@
 import Phaser from 'phaser';
 import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
-import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey } from '../assets/manifest.ts';
+import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey, type SoundKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM, SCALE, UI_ZOOM, VIEW_W } from '../layout.ts';
 import { ellipseTexture } from '../render/ellipse.ts';
+import { FX_SOUND, SHOT_SOUND, sfx } from '../audio/sfx.ts';
+import { attackStyle } from '../render/attackStyle.ts';
+import { settings } from '../settings.ts';
 import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
 import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
@@ -28,9 +31,11 @@ const PAN_SPEED = 220;
 const TOUCH_PAN_PX = 16;
 /** Nova effects by ability name, else by the caster's attack type. */
 const NOVA_FX: Record<string, FxKey> = { Torrent: 'waterpillar', Shockwave: 'rockspike', 'Royal Stomp': 'rockspike', 'Plague Cloud': 'magic' };
-const GLOW_FX = new Set<FxKey>(['explosion', 'spark', 'magic', 'boost', 'thunder', 'cut']);
+const GLOW_FX = new Set<FxKey>(['explosion', 'spark', 'magic', 'boost', 'thunder', 'cut', 'claw', 'clawdouble', 'cutdouble', 'slashcurved', 'spirit', 'holy']);
 /** Pause between two hit flashes on the same unit. */
 const FLASH_GAP_MS = 250;
+/** Moves longer than this per frame are teleports, not walking. */
+const TELEPORT_PX = 20;
 const NOVA_FX_BY_TYPE: Record<AttackType, FxKey> = { normal: 'rockspike', pierce: 'frost', siege: 'explosion', magic: 'magic', chaos: 'flame' };
 
 interface UnitView {
@@ -264,6 +269,7 @@ export class BattleScene extends Phaser.Scene {
     // A second press on 2 turns the send page.
     onKey(kb, 'keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
     onKey(kb, 'keydown-T', () => this.ui.toggleTypeChart());
+    onKey(kb, 'keydown-O', () => this.ui.toggleOptions());
     onKey(kb, 'keydown-I', () => this.ui.toggleWavePreview());
     onKey(kb, 'keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
@@ -271,7 +277,13 @@ export class BattleScene extends Phaser.Scene {
       const i = all.indexOf(this.viewArea);
       this.setView(all[(i + (e.shiftKey ? all.length - 1 : 1)) % all.length]!);
     });
-    onKey(kb, 'keydown-ESC', () => (this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
+    // Space jumps home: own lane first, a second press to the own king.
+    onKey(kb, 'keydown-SPACE', (e: KeyboardEvent) => {
+      e.preventDefault();
+      const game = this.session.game;
+      this.setView(this.viewArea === this.me ? game.arenaOf(game.players[this.me]!.team) : this.me);
+    });
+    onKey(kb, 'keydown-ESC', () => (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
     onKey(kb, 'keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
     onKey(kb, 'keydown-U', () => this.upgradeSelected());
     onKey(kb, 'keydown-DELETE', () => this.sellSelected());
@@ -313,6 +325,7 @@ export class BattleScene extends Phaser.Scene {
   private fieldClick(w: { x: number; y: number }, keepArmed: boolean): void {
     this.ui.hideSummary();
     if (this.ui.typeChartOpen) return this.ui.toggleTypeChart();
+    if (this.ui.optionsOpen) return;
     const cell = this.cellAt(w.x, w.y);
     const own = cell ? this.fighterAt(cell.col, cell.row) : undefined;
     if (own) {
@@ -323,7 +336,7 @@ export class BattleScene extends Phaser.Scene {
     const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
     if (cell && unit) {
       const result = this.session.send({ type: 'build', unit, col: cell.col, row: cell.row });
-      this.feedback(result);
+      this.feedback(result, undefined, 'build');
       if (!result.ok) return;
       // Still armed: the info panel keeps showing the fighter to place, not the one just built.
       if (keepArmed) return;
@@ -341,6 +354,7 @@ export class BattleScene extends Phaser.Scene {
    * lands off the grid.
    */
   private touchTap(w: { x: number; y: number }): void {
+    if (this.ui.optionsOpen) return;
     const cell = this.cellAt(w.x, w.y);
     const previewed = !!cell && this.hoverCell?.col === cell.col && this.hoverCell.row === cell.row;
     this.hoverCell = cell;
@@ -381,10 +395,10 @@ export class BattleScene extends Phaser.Scene {
   private slotKey(i: number): void {
     if (this.mode === 'send') {
       const merc = this.sends()[this.sendPage * SEND_PAGE_SIZE + i];
-      if (merc) this.feedback(this.session.send({ type: 'sendMerc', merc: merc.id }), `${merc.name.toUpperCase()} SENT!`);
+      if (merc) this.feedback(this.session.send({ type: 'sendMerc', merc: merc.id }), `${merc.name.toUpperCase()} SENT!`, 'build');
     } else if (i === REROLL_SLOT && this.isProphet()) {
       this.selectedBuild = null;
-      this.feedback(this.session.send({ type: 'reroll' }), 'NEW FIGHTERS!');
+      this.feedback(this.session.send({ type: 'reroll' }), 'NEW FIGHTERS!', 'magic');
     } else if (i < this.fighters().length) {
       if (this.session.game.phase !== 'build') return this.ui.floatText('BUILD AFTER WAVE', 0xff6060);
       this.selectedBuild = this.selectedBuild === i ? null : i;
@@ -420,11 +434,12 @@ export class BattleScene extends Phaser.Scene {
   private sellSelected(): void {
     const u = this.selectedUnit !== null ? this.session.game.units.get(this.selectedUnit) : undefined;
     if (!u || u.kind !== 'fighter' || u.owner !== this.me) return;
-    this.feedback(this.session.send({ type: 'sell', unitId: u.id }));
+    this.feedback(this.session.send({ type: 'sell', unitId: u.id }), undefined, 'sell');
     this.selectedUnit = null;
   }
 
-  private feedback(result: { ok: boolean; error?: string }, okText?: string): void {
+  private feedback(result: { ok: boolean; error?: string }, okText?: string, okSound: SoundKey = 'upgrade'): void {
+    sfx(this, result.ok ? okSound : 'error');
     if (!result.ok) this.ui.floatText((result.error ?? 'error').toUpperCase(), 0xff6060);
     else if (okText) this.ui.floatText(okText, 0xfff080);
   }
@@ -539,9 +554,12 @@ export class BattleScene extends Phaser.Scene {
       if (!visible) continue;
       const pos = this.session.interpolated(u.id)!;
       const s = this.toField(pos.x, pos.y);
-      const dx = s.x - view.lastX;
+      // Jumps (back to the grid after a wave, warps) are no walking: they keep the facing and speed.
+      const dx = Math.abs(s.x - view.lastX) > TELEPORT_PX ? 0 : s.x - view.lastX;
       if (Math.abs(dx) > 0.05) view.facingRight = dx > 0;
       view.speed += (Math.abs(dx) - view.speed) * 0.3;
+      // Idle fighters turn back towards the incoming creeps (in the arena the west army faces east).
+      if (u.kind === 'fighter' && game.phase !== 'arena' && view.speed < 0.05 && this.time.now >= view.attackUntil) view.facingRight = false;
       const moving = view.speed > 0.1;
       view.lastX = s.x;
       const { lunge, squash, hop } = view.recoil;
@@ -602,7 +620,7 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, alpha: 0.12, scaleX: 1.25, scaleY: 1.25, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: 0, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
+    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: this.toField(u.x, u.y).x, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
   }
@@ -680,7 +698,8 @@ export class BattleScene extends Phaser.Scene {
         if (a.kind === 'king') {
           view.sprite.play(`${KING_SPRITES[a.team]}-attack`).chain(`${KING_SPRITES[a.team]}-idle`);
           this.playFx('explosion', to.x, to.y - 6);
-          this.cameras.main.shake(80, 0.004);
+          sfx(this, 'explosion');
+          this.shake(80, 0.004);
           return;
         }
         const def = game.def(a);
@@ -695,10 +714,12 @@ export class BattleScene extends Phaser.Scene {
           const weapon = weaponFor(def);
           if (weapon) weaponSwing(this, this.trails, weapon, Math.round(from.x + lunge), Math.round(from.y), dir, this.unitDepth(a, view, from.y) + 1);
         }
-        if (ranged) projectile(this, def.attack.type, from.x + 6 * dir, from.y - 8, to.x, to.y - 6);
-        // Monster fighters carry no weapon, so their bite gets the bigger claw mark;
-        // creeps keep the small one so a swarm doesn't bury what it is chewing on.
-        else this.playFx(!character && a.kind === 'fighter' ? 'cutx' : 'cut', to.x, to.y - 6);
+        // Fighters hit in their builder's style; creeps and sends keep the small marks so a swarm
+        // doesn't bury what it is chewing on.
+        const { impact, ...shot } = attackStyle(game.data, def);
+        sfx(this, ranged ? SHOT_SOUND[shot.shot ?? 'arrow'] : (FX_SOUND[impact ?? 'cut'] ?? 'hit'));
+        if (!ranged) this.playFx(impact ?? 'cut', to.x, to.y - 6);
+        else projectile(this, shot, from.x + 6 * dir, from.y - 8, to.x, to.y - 6, impact && (() => this.playFx(impact, to.x, to.y - 6, 0.7)));
         return;
       }
       case 'damage': {
@@ -716,6 +737,7 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'death': {
         if (ev.area !== this.viewArea) return;
+        sfx(this, 'death');
         // Bounty for the local player's kills (mirrors the sim: fighter kills only, nothing in the finale).
         // Killed attackers are already gone from the state; their view (and def) lives until the next sync.
         const killer = ev.killerId !== null ? game.units.get(ev.killerId) : undefined;
@@ -724,6 +746,7 @@ export class BattleScene extends Phaser.Scene {
         if (killer?.kind === 'fighter' && killer.owner === this.me && bounty > 0) {
           const at = this.toField(ev.x, ev.y);
           this.goldPop(at.x, at.y - 20, bounty);
+          sfx(this, 'coin');
         }
         const u = game.units.get(ev.unitId);
         if (!u) return;
@@ -733,7 +756,8 @@ export class BattleScene extends Phaser.Scene {
       }
       case 'leak':
         if (ev.player === this.me) {
-          this.cameras.main.shake(120, 0.006);
+          this.shake(120, 0.006);
+          sfx(this, 'leak');
           this.ui.floatText('LEAK!', 0xff5050, VIEW_W - 60, FIELD_TOP + 14);
         }
         return;
@@ -754,6 +778,7 @@ export class BattleScene extends Phaser.Scene {
         if (ev.phase === 'build' && prev !== 'fight') return; // after the arena: its own banner said it all
         if (ev.phase === 'fight') {
           this.leaksAtWaveStart = game.players.map((p) => p.leaks);
+          sfx(this, 'wave');
           const wave = game.data.waves[ev.wave - 1]!;
           this.ui.showBanner([`WAVE ${ev.wave}`, `${wave.count}X ${game.data.units[wave.creep]!.name.toUpperCase()}`]);
         } else {
@@ -773,16 +798,23 @@ export class BattleScene extends Phaser.Scene {
         const s = this.toField(ev.x, ev.y);
         if (ev.effect === 'crit') {
           this.playFx('cutx', s.x, s.y - 8);
+          sfx(this, 'slash', 1.5);
           this.fieldText(s.x, s.y - 26, 'CRIT!', 0xffe040);
         } else if (ev.effect === 'stun') {
           this.playFx('thunder', s.x, s.y - 14);
+          sfx(this, 'stun');
           this.fieldText(s.x, s.y - 26, 'STUN', 0x98b8ff);
         } else if (ev.effect === 'heal') {
           this.playFx('boost', s.x, s.y - 10);
+          sfx(this, 'heal');
           this.fieldText(s.x, s.y - 20, `+${ev.amount}`, 0x70ff90);
         } else if (ev.effect === 'nova') {
           this.novaFx(ev.unitId, s.x, s.y);
-        } else this.playFx('explosion', s.x, s.y - 6, 0.6);
+          sfx(this, 'nova');
+        } else {
+          this.playFx('explosion', s.x, s.y - 6, 0.6);
+          sfx(this, 'explosion', 0.7);
+        }
         return;
       }
       case 'arenaEnd': {
@@ -814,13 +846,19 @@ export class BattleScene extends Phaser.Scene {
       // The field is seen from the side: squash the ring vertically.
       this.time.delayedCall(40 * i, () => this.playFx(key, x + Math.cos(angle) * radius * 0.8, y - 8 + Math.sin(angle) * radius * 0.4));
     }
-    this.cameras.main.shake(140, 0.004);
+    this.shake(140, 0.004);
+  }
+
+  /** Camera shake, unless turned off in the options. */
+  private shake(durationMs: number, intensity: number): void {
+    if (settings().shake) this.cameras.main.shake(durationMs, intensity);
   }
 
   private playFx(key: FxKey, x: number, y: number, scale = 1): void {
     const fx = this.add.sprite(Math.round(x), Math.round(y), `fx-${key}`).setDepth(10000).setScale(scale);
     // Light effects glow additively; solid ones (smoke, rock, water, ice) would wash out into white blobs.
-    if (GLOW_FX.has(key)) fx.setBlendMode(Phaser.BlendModes.ADD);
+    // Glowing ones draw one layer up so each blend mode stays one batch.
+    if (GLOW_FX.has(key)) fx.setBlendMode(Phaser.BlendModes.ADD).setDepth(10000.5);
     fx.play(`fx-${key}`).once('animationcomplete', () => fx.destroy());
   }
 
@@ -859,6 +897,7 @@ export class BattleScene extends Phaser.Scene {
     const game = this.session.game;
     const me = game.players[this.me]!;
     const title = winner === null ? 'DRAW' : winner === me.team ? 'VICTORY!' : 'DEFEAT...';
+    sfx(this, winner === me.team ? 'win' : 'lose');
     const fallen = ([0, 1] as const).find((t) => game.king(t).hp <= 0);
     const reason = fallen === undefined ? 'ALL WAVES SURVIVED' : `${fallen === me.team ? 'YOUR' : 'FOE'} KING FELL IN WAVE ${game.wave}`;
     const rows = game.players.map((p) => {

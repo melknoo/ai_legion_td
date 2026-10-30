@@ -3,7 +3,10 @@ import type { GameView } from '@legion/shared';
 import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
+import { MiniButton } from '../ui/SlotButton.ts';
 import { TextButton } from '../ui/TextButton.ts';
+import { optionsWindow } from '../ui/options.ts';
+import { TOUCH } from '../ui/touch.ts';
 import { Tutorial } from '../ui/Tutorial.ts';
 import { typeChart } from '../ui/typeChart.ts';
 import { FONT } from './BootScene.ts';
@@ -29,6 +32,7 @@ export class UiScene extends Phaser.Scene {
   private message: Phaser.GameObjects.Container | null = null;
   private summary: Phaser.GameObjects.Container | null = null;
   private chart: Phaser.GameObjects.Container | null = null;
+  private closeOptions: (() => void) | null = null;
   private choices: TextButton[] = [];
 
   constructor() {
@@ -39,9 +43,13 @@ export class UiScene extends Phaser.Scene {
     layoutCamera(this);
     this.link = link;
     this.chart = null;
+    this.closeOptions = null;
     this.hud = new Hud(this, link.game, link.player, link.views, link.actions);
     this.tutorial = new Tutorial(this, link.game);
     this.fieldLabel = this.add.bitmapText(6, FIELD_TOP + 3, FONT, '');
+    // Options in the top right corner of the battlefield (O).
+    const size = TOUCH ? 16 : 13;
+    new MiniButton(this, { x: VIEW_W - size - 3, y: FIELD_TOP + 3, size, touchPad: 2, text: 'O', onClick: () => this.toggleOptions(), onHover: () => {} });
     this.showBanner(['BUILD PHASE']);
   }
 
@@ -119,6 +127,20 @@ export class UiScene extends Phaser.Scene {
       return;
     }
     this.chart = typeChart(this, this.link.game, this.link.player, VIEW_W / 2, FIELD_TOP + FIELD_H / 2);
+  }
+
+  get optionsOpen(): boolean {
+    return this.closeOptions !== null;
+  }
+
+  /** Sound, shake and tips settings over the battlefield (O or the button in the field corner). */
+  toggleOptions(): void {
+    if (this.closeOptions) {
+      this.closeOptions();
+      this.closeOptions = null;
+      return;
+    }
+    this.closeOptions = optionsWindow(this, VIEW_W / 2, FIELD_TOP + FIELD_H / 2, () => this.toggleOptions());
   }
 
   floatText(text: string, color: number, x = VIEW_W / 2, y = FIELD_TOP + 40): void {

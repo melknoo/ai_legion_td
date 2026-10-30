@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { MELEE_RANGE, type AttackType, type UnitDef } from '@legion/shared';
 import type { WeaponKey } from '../assets/manifest.ts';
+import type { AttackStyle } from './attackStyle.ts';
 
 /** Per-unit animation offsets the scene adds on top of the simulated position. */
 export interface Recoil {
@@ -125,26 +126,37 @@ export function weaponSwing(scene: Phaser.Scene, trails: SwingTrails, key: Weapo
   });
 }
 
-/** Projectile flying from attacker to target; style follows the attack type. */
-export function projectile(scene: Phaser.Scene, type: AttackType, x0: number, y0: number, x1: number, y1: number): void {
+/** Glowing projectiles; solid ones (rock, cannonball, leaves, steel) keep normal blending. */
+const GLOW_SHOTS = new Set<string>(['energy', 'fireball', 'icespike']);
+
+/** Projectile flying from attacker to target in the attacker's style; `onHit` runs where it lands. */
+export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, y0: number, x1: number, y1: number, onHit?: () => void): void {
   const angle = Math.atan2(y1 - y0, x1 - x0);
   const duration = Math.max(60, Math.hypot(x1 - x0, y1 - y0) * 4);
+  const shot = style.shot ?? 'arrow';
   let obj: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
-  if (type === 'magic' || type === 'chaos' || type === 'siege') {
-    obj = scene.add.sprite(x0, y0, `proj-${type}`).play(`proj-${type}`);
-    if (type !== 'siege') obj.setBlendMode(Phaser.BlendModes.ADD);
-  } else {
-    obj = scene.add.image(x0, y0, 'arrow');
+  if (shot === 'arrow' || shot === 'kunai') obj = scene.add.image(x0, y0, shot);
+  else {
+    obj = scene.add.sprite(x0, y0, `proj-${shot}`).play(`proj-${shot}`);
+    if (GLOW_SHOTS.has(shot)) obj.setBlendMode(Phaser.BlendModes.ADD);
   }
-  obj.setDepth(10000).setRotation(type === 'siege' ? 0 : angle);
-  // Cannonballs arc; everything else flies straight.
-  const arc = type === 'siege' ? Math.min(20, Math.abs(x1 - x0) / 4) : 0;
+  // Glowing shots join the glowing effects one layer up (one batch per blend mode).
+  const glow = obj.blendMode === Phaser.BlendModes.ADD;
+  if (style.tint !== undefined) obj.setTint(style.tint);
+  // Round shots don't point anywhere; shuriken spin by their own frames.
+  const round = shot === 'cannon' || shot === 'rock' || shot === 'shuriken';
+  obj.setDepth(glow ? 10000.5 : 10000).setRotation(round ? 0 : angle).setFlipX(round && x1 < x0);
+  // Cannonballs and rocks arc; everything else flies straight.
+  const arc = shot === 'cannon' || shot === 'rock' ? Math.min(20, Math.abs(x1 - x0) / 4) : 0;
   const path = { t: 0 };
   scene.tweens.add({
     targets: path,
     t: 1,
     duration,
     onUpdate: () => obj.setPosition(x0 + (x1 - x0) * path.t, y0 + (y1 - y0) * path.t - Math.sin(path.t * Math.PI) * arc),
-    onComplete: () => obj.destroy(),
+    onComplete: () => {
+      obj.destroy();
+      onHit?.();
+    },
   });
 }

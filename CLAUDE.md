@@ -13,7 +13,8 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - `server/`: Colyseus 0.18 `LegionRoom` – lobby (modes AP/AR/SD/All Prophet, bots fill seats), then runs the authoritative sim and sends patches + `ev` event batches. Clients only send commands.
 - `client/`: Phaser 4 + Vite. `Session` interface with `LocalSession` (solo vs bots, sim in the browser) and `NetSession`. `BattleScene` draws the field, `UiScene` the HUD on top.
 - Screen: canvas 960x540; menus/HUD are laid out at 480x270 and drawn at 2x via `layoutCamera()` (`client/src/layout.ts`); the battlefield camera uses zoom 3. World units → field pixels via `SCALE` 0.25.
-- Graphics: Ninja Adventure pack (CC0) in `client/public/assets/ninja`, mapped in `client/src/assets/manifest.ts` and the generated `sprites.generated.ts`.
+- Graphics: Ninja Adventure pack (CC0) in `client/public/assets/ninja`, mapped in `client/src/assets/manifest.ts` and the generated `sprites.generated.ts`. Fighters attack in their builder's style (`client/src/render/attackStyle.ts`: projectile + impact FX, per-fighter overrides).
+- Sound: picks from the same pack in `assets/ninja/Audio` (`SOUNDS` in the manifest), played through `client/src/audio/sfx.ts` (throttled per key, voice cap). Settings (sound, volume, shake) in `client/src/settings.ts`, UI in `client/src/ui/options.ts`.
 
 ## Content pipeline
 - 18 builders + Chimera (morph eggs that hatch into a random fighter of the same tier) = 232 fighters. The Prophet (`random` builder) has no fighters of its own: the sim rolls each player a roster in `PlayerState.fighters`, so read that, never `builders[..].fighters`. Pharaoh is skipped on purpose (unfinished in the original).
@@ -38,4 +39,4 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
 - Mobile: first version is in (PWA, touch controls, see README). Not yet checked on a real phone/tablet; desktop Chrome has no touch, so tests feed touch events into `game.input.onTouchStart/Move/End`. Command-card slots on phones are ~55x36 CSS px, MiniButtons were enlarged for touch only. Possible next steps: Play Store via TWA (Bubblewrap), bigger touch layout after the WC3-style HUD rework.
-- Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music/SFX and settings, client auto-reconnect, `npm audit` warnings.
+- Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music, client auto-reconnect, `npm audit` warnings.

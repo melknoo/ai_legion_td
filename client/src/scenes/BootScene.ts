@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
-  ARROW_PATH, DIR, FONT_PATH, FX, ICONS, KING_SPRITES, PROJECTILES, UNIT_SPRITES, WEAPONS,
-  bossPath, characterPath, facesetPath, monsterPath, spriteBaseKey, spriteKey, spriteSheets,
+  ARROW_PATH, DIR, FONT_PATH, FX, ICONS, KING_SPRITES, KUNAI_PATH, PROJECTILES, SOUNDS, UNIT_SPRITES, WEAPONS,
+  bossPath, characterPath, facesetPath, monsterPath, soundPath, spriteBaseKey, spriteKey, spriteSheets,
 } from '../assets/manifest.ts';
 import { bakeHue } from '../render/hue.ts';
 import { makeGroundTextures } from '../render/groundTextures.ts';
@@ -50,8 +50,10 @@ export class BootScene extends Phaser.Scene {
       this.load.spritesheet(`fx-${key}`, fx.path, { frameWidth: fx.w, frameHeight: fx.h });
     }
     this.load.image('arrow', ARROW_PATH);
+    this.load.image('kunai', KUNAI_PATH);
+    for (const key of SOUNDS) this.load.audio(key, soundPath(key));
     for (const [key, path] of Object.entries(WEAPONS)) this.load.image(`wpn-${key}`, path);
-    for (const [key, p] of Object.entries(PROJECTILES)) this.load.spritesheet(`proj-${key}`, p.path, sheet16);
+    for (const [key, p] of Object.entries(PROJECTILES)) this.load.spritesheet(`proj-${key}`, p.path, { frameWidth: p.w, frameHeight: p.h });
     this.load.image(FONT_SOURCE, FONT_PATH);
   }
 

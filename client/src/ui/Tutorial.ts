@@ -50,7 +50,7 @@ const TIPS: Tip[] = [
   { lines: ['SENDS (2): BUY UNITS THAT ATTACK', 'THE FOE LANE NEXT WAVE. EACH ONE', 'RAISES YOUR INCOME.'], spot: { x: 161, y: 187, w: 18, h: 30 }, when: building },
   { lines: ['CREEPS PASSING THE RED LINE LEAK', 'TO YOUR KING. IF IT FALLS, YOUR', 'TEAM LOSES.'], spot: { x: 2, y: FIELD_TOP, w: 476, h: FIELD_H }, when: fighting },
   { lines: ['TOP RIGHT: KING HP OF BOTH TEAMS', 'AND HOW MANY ENEMIES ARE LEFT.'], spot: { x: 250, y: 2, w: 228, h: 22 }, when: fighting },
-  { lines: ['TABS: WATCH OTHER LANES AND THE', 'KINGS. TAB KEY STEPS THROUGH.'], spot: { x: 82, y: 1, w: 166, h: 23 }, when: fighting },
+  { lines: ['TABS: WATCH OTHER LANES AND THE', 'KINGS. TAB STEPS, SPACE: HOME.'], spot: { x: 82, y: 1, w: 166, h: 23 }, when: fighting },
   { lines: ['CLICK ONE OF YOUR FIGHTERS TO', 'UPGRADE (U) OR SELL IT (DEL).', 'T SHOWS THE DAMAGE TYPE CHART.'], spot: { x: 182, y: 186, w: 156, h: 84 }, when: (g) => building(g) && g.wave >= 2 },
 ];
 

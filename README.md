@@ -36,6 +36,8 @@ Controls (everything also works with the mouse via the HUD):
 - click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); `U` upgrade, `Del` sell
 - `Esc` / right click: cancel placement and selection
 - `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen
+- `SPACE`: jump to my lane (again: my king)
+- `O` or the `O` button in the field corner: options (sound on/off, volume, screen shake, tips); also on the title screen
 - `TAB` / view tabs: my lane, my king, foe lane, foe king; `R` restart after game over
 - The battlefield camera follows the fighting; pan with `←/→` or the mouse wheel. Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 3x
 
@@ -74,4 +76,4 @@ Updates: `git pull` and the same `up -d --build` (running games end, rooms live 
 
 ## Credits
 
-Graphics: [Ninja Adventure Asset Pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack) by Pixel-boy & AAA (CC0).
+Graphics and sound effects: [Ninja Adventure Asset Pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack) by Pixel-boy & AAA (CC0). The sounds in `client/public/assets/ninja/Audio` are picks from the pack's `Audio/Sounds` and `Jingles`, converted to mono mp3 (`ffmpeg -i in.wav -ac 1 -ar 32000 -b:a 56k out.mp3`).

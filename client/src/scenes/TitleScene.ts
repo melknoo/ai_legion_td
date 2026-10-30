@@ -7,12 +7,12 @@ import { ff6Window } from '../ui/ff6Window.ts';
 import { WC3_BUILDER } from '../ui/builderList.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
-import { setTipsEnabled, tipsEnabled } from '../ui/Tutorial.ts';
+import { OPTION_ITEMS, clickStep } from '../ui/options.ts';
 import { onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
 
-type Panel = 'main' | 'solo' | 'join' | 'name' | 'builders';
+type Panel = 'main' | 'solo' | 'join' | 'name' | 'builders' | 'options';
 
 interface MenuItem {
   label: () => string;
@@ -112,7 +112,7 @@ export class TitleScene extends Phaser.Scene {
         { label: () => 'CREATE ONLINE GAME', action: () => this.scene.start('lobby', { create: true, name: this.name }) },
         { label: () => 'JOIN ONLINE GAME', action: () => this.show('join') },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
-        { label: () => `TIPS: ${tipsEnabled() ? 'ON' : 'OFF'}`, action: () => setTipsEnabled(!tipsEnabled()) },
+        { label: () => 'OPTIONS', action: () => this.show('options') },
         { label: () => 'BUILDER LIST', action: () => this.show('builders') },
       ];
       this.window(150, 146, 180, 94);
@@ -130,6 +130,9 @@ export class TitleScene extends Phaser.Scene {
         portrait: this.add.image(342, 160, '__DEFAULT').setOrigin(0, 0),
       };
       this.layer.add([this.preview.hint, this.preview.portrait]);
+    } else if (panel === 'options') {
+      this.items = [...OPTION_ITEMS.map((o) => ({ label: o.label, change: o.change, action: () => o.change(1) })), back];
+      this.window(132, 150, 216, 84);
     } else if (panel === 'builders') {
       this.items = [back];
       this.window(30, 114, 420, 148, 126);
@@ -158,8 +161,8 @@ export class TitleScene extends Phaser.Scene {
       zone.on('pointermove', () => this.mouseMoved && (this.index = i));
       zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
         this.index = i;
-        // Clicking the left/right part of an option line steps it back/forward.
-        if (item.change) item.change(p.worldX < x + w / 2 ? -1 : 1);
+        // Clicking left or right of an option's arrows steps it back/forward.
+        if (item.change) item.change(clickStep(t.text, t.x, p.worldX));
         else item.action?.();
       });
       this.layer.add([t, zone]);

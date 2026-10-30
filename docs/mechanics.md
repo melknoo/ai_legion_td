@@ -115,6 +115,7 @@ Typen-Rhythmus: Fernkampf in 4/8/12/16/20/24/28/29, Luft in 5/13/21/29.
 ## 8. King
 
 - **Basiswerte:** 2600 HP, 3 HP/s Regeneration, 5 Rüstung, 31–41 Schaden, Cooldown 0,9 s, Reichweite 715, unbeweglich.
+- **HP bleiben über Wellen erhalten:** Schaden durch Leaks wird nicht zurückgesetzt; die Regeneration läuft durchgehend (auch in Build-Phase und Arena).
 - **Upgrades** je 80 Holz und +3 Income:
   - HP: +(425 + 25·k), maximal 20 Mal
   - Angriff: +10, maximal 30 Mal
