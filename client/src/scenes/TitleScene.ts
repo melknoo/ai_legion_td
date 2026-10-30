@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, PROPHET, modeLocksBuilder, rollBuilders, rollableBuilders, type ModeId } from '@legion/shared';
+import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, PROPHET, ROOM_TITLE_CHARS, ROOM_TITLE_MAX, modeLocksBuilder, rollBuilders, rollableBuilders, roomTitle, type ModeId, type RoomListing } from '@legion/shared';
 import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
+import { fetchRooms } from '../net/server.ts';
 import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { facesetKey } from '../ui/Hud.ts';
@@ -11,7 +12,7 @@ import { onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
 
-type Panel = 'main' | 'solo' | 'join' | 'name' | 'options';
+type Panel = 'main' | 'solo' | 'create' | 'title' | 'join' | 'code' | 'name' | 'options';
 
 interface MenuItem {
   label: () => string;
@@ -37,6 +38,9 @@ export function addSky(scene: Phaser.Scene): void {
 }
 
 const NAME_KEY = 'legion.name';
+/** Public games the join list shows at once. */
+const LIST_ROWS = 6;
+const LIST_REFRESH_MS = 3000;
 const BUILDERS = Object.keys(LEGION_DATA.builders);
 
 /** FF6-style title screen and main menu: solo setup, create/join online games, player name. */
@@ -55,6 +59,16 @@ export class TitleScene extends Phaser.Scene {
   private mouseMoved = false;
   /** Solo panel: builder portrait and mode hint, refreshed every frame. */
   private preview: { hint: Phaser.GameObjects.BitmapText; portrait: Phaser.GameObjects.Image } | null = null;
+  /** Panel status line, refreshed every frame. */
+  private note: { text: Phaser.GameObjects.BitmapText; get: () => string } | null = null;
+  /** Create panel: keep the new room out of the public list. */
+  private hidden = false;
+  /** Create panel: game name; empty means the host's default. */
+  private gameTitle = '';
+  /** Join panel: the last public game list (null while loading), polled while the panel is open. */
+  private rooms: RoomListing[] | null = null;
+  private roomsError = false;
+  private poll: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super('title');
@@ -75,7 +89,11 @@ export class TitleScene extends Phaser.Scene {
     onKey(kb, 'keydown-RIGHT', () => this.items[this.index]?.change?.(1));
     onKey(kb, 'keydown-ENTER', () => !this.input_ && this.items[this.index]?.action?.());
     onKey(kb, 'keydown-SPACE', () => !this.input_ && this.items[this.index]?.action?.());
-    onKey(kb, 'keydown-ESC', () => this.panel !== 'main' && this.show('main'));
+    onKey(kb, 'keydown-ESC', () => {
+      if (this.panel === 'code') this.openList();
+      else if (this.panel === 'title') this.show('create');
+      else if (this.panel !== 'main') this.show('main');
+    });
     this.input.on('pointermove', () => (this.mouseMoved = true));
     this.show('main');
   }
@@ -90,6 +108,7 @@ export class TitleScene extends Phaser.Scene {
       this.preview.portrait.setVisible(!random);
       if (!random) this.preview.portrait.setTexture(facesetKey(builderPortrait(LEGION_DATA.builders[this.soloBuilder()]!)));
     }
+    this.note?.text.setText(this.note.get());
   }
 
   // ---- panels ----------------------------------------------------------------
@@ -100,6 +119,11 @@ export class TitleScene extends Phaser.Scene {
     this.input_?.destroy();
     this.input_ = null;
     this.preview = null;
+    this.note = null;
+    if (panel !== 'join') {
+      this.poll?.remove();
+      this.poll = null;
+    }
     this.mouseMoved = false;
     this.layer = this.add.container(0, 0);
     this.index = 0;
@@ -108,8 +132,8 @@ export class TitleScene extends Phaser.Scene {
     if (panel === 'main') {
       this.items = [
         { label: () => 'SOLO GAME', action: () => this.show('solo') },
-        { label: () => 'CREATE ONLINE GAME', action: () => this.scene.start('lobby', { create: true, name: this.name }) },
-        { label: () => 'JOIN ONLINE GAME', action: () => this.show('join') },
+        { label: () => 'CREATE ONLINE GAME', action: () => this.show('create') },
+        { label: () => 'JOIN ONLINE GAME', action: () => this.openList() },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
         { label: () => 'OPTIONS', action: () => this.show('options') },
       ];
@@ -128,21 +152,53 @@ export class TitleScene extends Phaser.Scene {
         portrait: this.add.image(342, 160, '__DEFAULT').setOrigin(0, 0),
       };
       this.layer.add([this.preview.hint, this.preview.portrait]);
+    } else if (panel === 'create') {
+      const toggle = () => (this.hidden = !this.hidden);
+      this.items = [
+        { label: () => `NAME: ${roomTitle(this.gameTitle, this.name)}`, action: () => this.show('title') },
+        { label: () => `VISIBILITY < ${this.hidden ? 'PRIVATE' : 'PUBLIC'} >`, change: toggle, action: toggle },
+        { label: () => 'CREATE', action: () => this.scene.start('lobby', { create: true, name: this.name, private: this.hidden, title: this.gameTitle }) },
+        back,
+      ];
+      this.window(120, 146, 240, 66);
+      this.note = {
+        text: this.add.bitmapText(240, 218, FONT, '').setOrigin(0.5, 0).setTint(0xc0c8f0),
+        get: () => (this.hidden ? 'JOIN BY ROOM CODE OR LINK ONLY' : 'LISTED FOR EVERYONE TO JOIN'),
+      };
+      this.layer.add(this.note.text);
+    } else if (panel === 'join') {
+      const rows = (this.rooms ?? []).slice(0, LIST_ROWS).map((r) => ({ label: () => roomLabel(r), action: () => this.join(r.id) }));
+      this.items = [...rows, { label: () => 'ENTER ROOM CODE', action: () => this.show('code') }, back];
+      // Header line, plus a status line in place of the rows while the list is empty.
+      const top = rows.length ? 14 : 28;
+      this.window(80, 116, 320, 16 + top + this.items.length * 14, top);
+      this.layer.add(this.add.bitmapText(102, 124, FONT, `${'GAME'.padEnd(ROOM_TITLE_MAX + 1)}${'MODE'.padEnd(13)}SLOTS`).setTint(0xc0c8f0));
+      this.note = {
+        text: this.add.bitmapText(240, 138, FONT, '').setOrigin(0.5, 0).setTint(0xc0c8f0),
+        get: () => (this.roomsError ? 'CANNOT REACH THE SERVER' : !this.rooms ? 'LOADING...' : this.rooms.length ? '' : 'NO OPEN GAMES RIGHT NOW'),
+      };
+      this.layer.add(this.note.text);
     } else if (panel === 'options') {
       this.items = [...OPTION_ITEMS.map((o) => ({ label: o.label, change: o.change, action: () => o.change(1) })), back];
       this.window(132, 150, 216, 84);
     } else {
-      const join = panel === 'join';
+      const join = panel === 'code';
+      const title = panel === 'title';
+      const submit = (v: string) => (join ? this.join(v) : title ? this.saveTitle(v) : this.saveName(v));
       this.input_ = new TextInput(this, 160, 178, 160, {
-        maxLength: join ? 16 : 10,
-        allowed: join ? /[A-Za-z0-9_-]/ : /[A-Z0-9 ]/,
+        maxLength: join || title ? 16 : 10,
+        allowed: join ? /[A-Za-z0-9_-]/ : title ? ROOM_TITLE_CHARS : /[A-Z0-9 ]/,
         upperCase: !join,
-        initial: join ? '' : this.name,
-        onEnter: (v) => (join ? this.join(v) : this.saveName(v)),
+        initial: join ? '' : title ? roomTitle(this.gameTitle, this.name) : this.name,
+        onEnter: submit,
       }).setActive(true);
-      this.items = [{ label: () => (join ? 'JOIN' : 'OK'), action: () => (join ? this.join(this.input_!.value) : this.saveName(this.input_!.value)) }, back];
+      this.items = [
+        { label: () => (join ? 'JOIN' : 'OK'), action: () => submit(this.input_!.value) },
+        join ? { label: () => 'BACK', action: () => this.openList() } : title ? { label: () => 'BACK', action: () => this.show('create') } : back,
+      ];
       this.window(150, 158, 180, 74, 34);
-      this.layer.add(this.add.bitmapText(240, 164, FONT, join ? (TOUCH ? 'ROOM CODE OR LINK' : 'ROOM CODE OR LINK (CTRL+V)') : 'YOUR NAME').setOrigin(0.5, 0).setTint(0xc0c8f0));
+      const caption = join ? (TOUCH ? 'ROOM CODE OR LINK' : 'ROOM CODE OR LINK (CTRL+V)') : title ? 'GAME NAME' : 'YOUR NAME';
+      this.layer.add(this.add.bitmapText(240, 164, FONT, caption).setOrigin(0.5, 0).setTint(0xc0c8f0));
     }
   }
 
@@ -205,8 +261,41 @@ export class TitleScene extends Phaser.Scene {
 
   // ---- online -------------------------------------------------------------------
 
+  /** Join panel: shows the public game list and keeps it fresh while open. */
+  private openList(): void {
+    this.rooms = null;
+    this.roomsError = false;
+    this.show('join');
+    void this.loadRooms();
+    this.poll ??= this.time.addEvent({ delay: LIST_REFRESH_MS, loop: true, callback: () => void this.loadRooms() });
+  }
+
+  private async loadRooms(): Promise<void> {
+    let rooms: RoomListing[] | null = null;
+    try {
+      rooms = await fetchRooms();
+    } catch {
+      // Shown as a status line; the next poll tries again.
+    }
+    if (this.panel !== 'join') return;
+    const list = rooms ?? [];
+    const changed = this.roomsError !== !rooms || JSON.stringify(list) !== JSON.stringify(this.rooms);
+    this.roomsError = !rooms;
+    if (!changed) return;
+    this.rooms = list;
+    // Rebuild the rows, keeping the cursor where it was.
+    const index = this.index;
+    this.show('join');
+    this.index = Math.min(index, this.items.length - 1);
+  }
+
   private join(code: string): void {
     if (code.trim()) this.scene.start('lobby', { join: code.trim(), name: this.name });
+  }
+
+  private saveTitle(value: string): void {
+    this.gameTitle = value.trim();
+    this.show('create');
   }
 
   private saveName(value: string): void {
@@ -254,6 +343,11 @@ export class TitleScene extends Phaser.Scene {
     this.add.bitmapText(VIEW_W / 2, 104, FONT, 'MULTIPLAYER TOWER DEFENSE').setOrigin(0.5).setTint(0x9aa0d0);
     this.tweens.add({ targets: logo, y: 43, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
+}
+
+function roomLabel(r: RoomListing): string {
+  const mode = Object.hasOwn(MODES, r.mode) ? MODES[r.mode as ModeId].name : '?';
+  return `${r.title.slice(0, ROOM_TITLE_MAX).padEnd(ROOM_TITLE_MAX + 1)}${mode.padEnd(13)}${r.players}/${r.max}`;
 }
 
 function readName(): string {

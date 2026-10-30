@@ -6,7 +6,6 @@ import {
   MODES,
   MODE_IDS,
   ROOM_NAME,
-  SERVER_PORT,
   modeLocksBuilder,
   type JoinOptions,
   type LobbyMessages,
@@ -15,6 +14,7 @@ import {
 } from '@legion/shared';
 import { builderPortrait } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
+import { serverUrl } from '../net/server.ts';
 import { NetSession } from '../session/NetSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { facesetKey } from '../ui/Hud.ts';
@@ -37,6 +37,8 @@ interface LobbyStateLike {
   status: string;
   host: string;
   mode: string;
+  title: string;
+  private: boolean;
   players: Iterable<SlotLike>;
 }
 
@@ -45,6 +47,10 @@ export interface LobbyEntry {
   create?: boolean;
   join?: string;
   name?: string;
+  /** Creating: hide the room from the public game list. */
+  private?: boolean;
+  /** Creating: game name (empty: the server's default). */
+  title?: string;
 }
 
 const TEAM_NAMES = ['WEST', 'EAST'];
@@ -55,6 +61,7 @@ export class LobbyScene extends Phaser.Scene {
   private entry: LobbyEntry = {};
   private room: Room | null = null;
   private status!: Phaser.GameObjects.BitmapText;
+  private titleText!: Phaser.GameObjects.BitmapText;
   private codeText!: Phaser.GameObjects.BitmapText;
   private modeText!: Phaser.GameObjects.BitmapText;
   private modeHint!: Phaser.GameObjects.BitmapText;
@@ -64,7 +71,7 @@ export class LobbyScene extends Phaser.Scene {
   private portrait!: Phaser.GameObjects.Image;
   private builderName!: Phaser.GameObjects.BitmapText;
   private builderNote!: Phaser.GameObjects.BitmapText;
-  private buttons!: Record<'copy' | 'modePrev' | 'modeNext' | 'builderPrev' | 'builderNext' | 'team' | 'ready' | 'leave' | 'botW' | 'botE' | 'start', TextButton>;
+  private buttons!: Record<'copy' | 'visibility' | 'modePrev' | 'modeNext' | 'builderPrev' | 'builderNext' | 'team' | 'ready' | 'leave' | 'botW' | 'botE' | 'start', TextButton>;
   private unbindErr: (() => void) | null = null;
 
   constructor() {
@@ -72,9 +79,11 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   init(entry?: LobbyEntry): void {
-    // Deep links (`?room=CODE`, `?online`) arrive without scene data.
+    // Deep links (`?room=CODE`, `?online`) arrive without scene data; a room made from a link is for friends, so private.
     const params = new URLSearchParams(location.search);
-    this.entry = entry?.create || entry?.join ? entry : { join: params.get('room') ?? undefined, create: !params.get('room'), name: params.get('name') ?? undefined };
+    this.entry = entry?.create || entry?.join
+      ? entry
+      : { join: params.get('room') ?? undefined, create: !params.get('room'), name: params.get('name') ?? undefined, private: true };
     this.room = null;
     this.teamText = [];
     this.botRemove = [];
@@ -84,7 +93,7 @@ export class LobbyScene extends Phaser.Scene {
     layoutCamera(this);
     addSky(this);
     ff6Window(this, 8, 8, VIEW_W - 16, VIEW_H - 16);
-    this.add.bitmapText(VIEW_W / 2, 15, FONT, 'ONLINE LOBBY').setOrigin(0.5, 0).setTint(0xfff080);
+    this.titleText = this.add.bitmapText(VIEW_W / 2, 15, FONT, 'ONLINE LOBBY').setOrigin(0.5, 0).setTint(0xfff080);
     this.codeText = this.add.bitmapText(20, 31, FONT, '');
     this.status = this.add.bitmapText(20, 140, FONT, 'CONNECTING...').setTint(0xc0c8f0);
     this.modeText = this.add.bitmapText(20, 47, FONT, '');
@@ -110,6 +119,7 @@ export class LobbyScene extends Phaser.Scene {
 
     const y = 228;
     this.buttons = {
+      visibility: new TextButton(this, 264, 27, 84, 'PUBLIC', () => this.send('setPrivate', !this.state()?.private)),
       copy: new TextButton(this, 352, 27, 108, 'COPY LINK', () => this.copyLink()),
       modePrev: new TextButton(this, 190, 43, 16, '<', () => this.cycleMode(-1)),
       modeNext: new TextButton(this, 210, 43, 16, '>', () => this.cycleMode(1)),
@@ -141,6 +151,9 @@ export class LobbyScene extends Phaser.Scene {
 
     this.modeText.setText(`MODE: ${MODES[mode].name}`);
     this.modeHint.setText(MODES[mode].hint);
+    if (s.title) this.titleText.setText(s.title);
+    this.codeText.setText(`ROOM CODE: ${room.roomId}${host ? '' : s.private ? '  PRIVATE' : '  PUBLIC'}`);
+    this.buttons.visibility.setLabel(s.private ? 'PRIVATE' : 'PUBLIC').setVisible(host);
     this.buttons.modePrev.setVisible(host);
     this.buttons.modeNext.setVisible(host);
 
@@ -174,9 +187,8 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   private async connect(): Promise<void> {
-    const options: JoinOptions = { name: this.entry.name, fast: new URLSearchParams(location.search).has('fast') };
-    // Dev: Vite and the game server run on separate ports; hosted, the server also serves the page.
-    const client = new Client(import.meta.env.DEV ? `${location.protocol}//${location.hostname}:${SERVER_PORT}` : location.origin);
+    const options: JoinOptions = { name: this.entry.name, fast: new URLSearchParams(location.search).has('fast'), private: this.entry.private, title: this.entry.title };
+    const client = new Client(serverUrl());
     try {
       this.room = this.entry.join ? await client.joinById(this.entry.join, options) : await client.create(ROOM_NAME, options);
     } catch (e) {
@@ -186,7 +198,6 @@ export class LobbyScene extends Phaser.Scene {
       this.status.setText(reason ?? (this.entry.join ? 'ROOM NOT FOUND OR ALREADY STARTED' : 'CANNOT CONNECT - IS THE SERVER RUNNING?')).setTint(0xff7070);
       return;
     }
-    this.codeText.setText(`ROOM CODE: ${this.room.roomId}`);
     history.replaceState(null, '', `${location.pathname}?room=${this.room.roomId}`);
     this.unbindErr = this.room.onMessage('err', (msg: string) => this.showError(msg));
   }

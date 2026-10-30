@@ -13,6 +13,38 @@ export interface JoinOptions {
   name?: string;
   /** Dev aid: short build phases. */
   fast?: boolean;
+  /** Creating a room: keep it out of the public game list (joinable by code only). */
+  private?: boolean;
+  /** Creating a room: its name in the game list; empty means "<HOST>'S GAME". */
+  title?: string;
+}
+
+/** Longest game name; the game list has a fixed column for it. */
+export const ROOM_TITLE_MAX = 16;
+/** Characters a game name may use (all drawable by the bitmap font). */
+export const ROOM_TITLE_CHARS = /[A-Z0-9 '!?.-]/;
+
+/** Uppercased, filtered and cut game name, or the host's default. */
+export function roomTitle(raw: unknown, host: string): string {
+  const clean = typeof raw === 'string' ? [...raw.toUpperCase()].filter((c) => ROOM_TITLE_CHARS.test(c)).join('').trim() : '';
+  return (clean || `${host}'S GAME`).slice(0, ROOM_TITLE_MAX);
+}
+
+/** One open public lobby, as `GET /rooms` lists it. */
+export interface RoomListing {
+  id: string;
+  title: string;
+  mode: string;
+  /** Taken slots, bots included. */
+  players: number;
+  max: number;
+}
+
+/** Matchmaking metadata a lobby keeps up to date for the game list. */
+export interface RoomMeta {
+  title: string;
+  mode: string;
+  players: number;
 }
 
 /** Builder selection modes, as in Legion TD Mega (-ap, -ar, -sd). */
@@ -45,6 +77,7 @@ export interface LobbyMessages {
   setTeam: TeamId;
   setReady: boolean;
   setMode: ModeId;
+  setPrivate: boolean;
   addBot: TeamId;
   removeBot: number;
   start: null;

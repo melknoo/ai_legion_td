@@ -64,6 +64,10 @@ export const NetState = schema(
     host: t.string(),
     /** Builder selection mode: ap | ar | sd | apr. */
     mode: t.string(),
+    /** Game name shown in the game list and lobby. */
+    title: t.string(),
+    /** Hidden from the public game list. */
+    private: t.boolean(),
     /** Slot order is the player index in the game. */
     players: t.array(NetPlayer),
     units: t.map(NetUnit),

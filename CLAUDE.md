@@ -10,7 +10,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 
 ## Architecture
 - `shared/`: deterministic simulation (`sim/game.ts`, 20 Hz, seeded `rng.ts`), abilities (`sim/abilities.ts`, 12 effect kinds; data in `data/abilities.ts` + one file per builder in `data/abilities/`), bot (`sim/bot.ts`), content (`data/legion.ts`; fighters are generated into `data/fighters.generated.ts`).
-- `server/`: Colyseus 0.18 `LegionRoom` – lobby (modes AP/AR/SD/All Prophet, bots fill seats), then runs the authoritative sim and sends patches + `ev` event batches. Clients only send commands.
+- `server/`: Colyseus 0.18 `LegionRoom` – lobby (modes AP/AR/SD/All Prophet, bots fill seats), then runs the authoritative sim and sends patches + `ev` event batches. Clients only send commands. Public lobbies are listed via `GET /rooms` (`server/src/rooms.ts`, from room metadata); private rooms are only joinable by code.
 - `client/`: Phaser 4 + Vite. `Session` interface with `LocalSession` (solo vs bots, sim in the browser) and `NetSession`. `BattleScene` draws the field, `UiScene` the HUD on top.
 - Screen: canvas 960x540; menus/HUD are laid out at 480x270 and drawn at 2x via `layoutCamera()` (`client/src/layout.ts`); the battlefield camera uses zoom 3. World units → field pixels via `SCALE` 0.25.
 - Graphics: Ninja Adventure pack (CC0) in `client/public/assets/ninja`, mapped in `client/src/assets/manifest.ts` and the generated `sprites.generated.ts`. Fighters attack in their builder's style (`client/src/render/attackStyle.ts`: projectile + impact FX, per-fighter overrides).

@@ -2,6 +2,7 @@ import { defineRoom, defineServer } from 'colyseus';
 import { ROOM_NAME, SERVER_PORT } from '@legion/shared';
 import { LegionRoom } from './LegionRoom.ts';
 import { log, monitorRoutes } from './monitor.ts';
+import { roomRoutes } from './rooms.ts';
 import { serveClient } from './static.ts';
 
 const port = Number(process.env.PORT ?? SERVER_PORT);
@@ -14,6 +15,7 @@ const server = defineServer({
   },
   express: (app) => {
     app.use(monitorRoutes());
+    app.use(roomRoutes());
     if (clientDir) app.use(serveClient(clientDir));
   },
 });

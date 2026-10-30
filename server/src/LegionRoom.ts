@@ -13,11 +13,13 @@ import {
   modeLocksBuilder,
   rollBuilders,
   rollableBuilders,
+  roomTitle,
   type GameData,
   type GameEvent,
   type JoinOptions,
   type ModeId,
   type PlayerCommand,
+  type RoomMeta,
   type TeamId,
 } from '@legion/shared';
 import { log, monitor } from './monitor.ts';
@@ -39,7 +41,7 @@ const connections = new Map<string, number>();
  * simulation. Clients only send commands; state flows back as schema patches plus
  * batched visual events.
  */
-export class LegionRoom extends Room<{ state: NetState }> {
+export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
   override maxClients = MAX_TEAM_SIZE * 2;
   override patchRate = 100;
   override maxMessagesPerSecond = 30;
@@ -52,6 +54,8 @@ export class LegionRoom extends Room<{ state: NetState }> {
   private ips = new Map<string, string>();
   /** Counted in `openRooms`; a room turned away in onCreate still gets disposed. */
   private counted = false;
+  /** Requested game name, applied once the host's own name is known. */
+  private requestedTitle = '';
   private pending: GameEvent[] = [];
   private ticks = 0;
 
@@ -62,6 +66,9 @@ export class LegionRoom extends Room<{ state: NetState }> {
     this.state.status = 'lobby';
     this.state.mode = 'ap';
     this.state.winner = -1;
+    this.state.private = !!options.private;
+    this.requestedTitle = typeof options.title === 'string' ? options.title : '';
+    void this.setPrivate(this.state.private);
     monitor.roomCreated(this.roomId);
     if (options.fast) {
       this.data = { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0 } };
@@ -77,6 +84,12 @@ export class LegionRoom extends Room<{ state: NetState }> {
       if (!this.isHost(client) || !this.inLobby() || !MODE_IDS.includes(mode)) return;
       this.state.mode = mode;
       for (const p of this.state.players) this.applyMode(p);
+      this.updateListing();
+    });
+    this.onMessage('setPrivate', (client, hidden: boolean) => {
+      if (!this.isHost(client) || !this.inLobby() || typeof hidden !== 'boolean') return;
+      this.state.private = hidden;
+      void this.setPrivate(hidden);
     });
     this.onMessage('setTeam', (client, team: TeamId) => {
       const p = this.slotOf(client);
@@ -98,10 +111,13 @@ export class LegionRoom extends Room<{ state: NetState }> {
       bot.connected = true;
       this.applyMode(bot);
       this.state.players.push(bot);
+      this.updateListing();
     });
     this.onMessage('removeBot', (client, index: number) => {
       const p = this.state.players[index];
-      if (this.isHost(client) && this.inLobby() && p?.bot) this.state.players.splice(index, 1);
+      if (!this.isHost(client) || !this.inLobby() || !p?.bot) return;
+      this.state.players.splice(index, 1);
+      this.updateListing();
     });
     this.onMessage('start', (client) => {
       if (this.isHost(client) && this.inLobby()) this.startGame(client);
@@ -135,8 +151,12 @@ export class LegionRoom extends Room<{ state: NetState }> {
     p.connected = true;
     this.applyMode(p);
     this.state.players.push(p);
-    if (!this.state.host) this.state.host = client.sessionId;
+    if (!this.state.host) {
+      this.state.host = client.sessionId;
+      this.state.title = roomTitle(this.requestedTitle, p.name);
+    }
     this.reportPlayers();
+    this.updateListing();
   }
 
   override async onLeave(client: Client): Promise<void> {
@@ -148,6 +168,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
       this.state.players.splice(index, 1);
       if (this.state.host === client.sessionId) this.state.host = this.state.players.find((q) => !q.bot)?.sessionId ?? '';
       this.reportPlayers();
+      this.updateListing();
       return;
     }
     // Mid-game: keep the seat for a while; a bot plays it meanwhile.
@@ -194,6 +215,11 @@ export class LegionRoom extends Room<{ state: NetState }> {
 
   private reportPlayers(): void {
     monitor.players(this.roomId, this.state.players.filter((p) => !p.bot && p.connected).length);
+  }
+
+  /** What the public game list shows: game name, mode and taken slots. */
+  private updateListing(): void {
+    void this.setMetadata({ title: this.state.title, mode: this.state.mode, players: this.state.players.length });
   }
 
   private builders(): string[] {

@@ -3,7 +3,7 @@
 // the previous one is dropped; within one build, static files are served from the cache.
 const CACHE = 'legion-__BUILD__';
 /** Server routes that must always reach the server (matchmaking, monitoring). */
-const LIVE = /^\/(matchmake|health|stats|client-error)(\/|$)/;
+const LIVE = /^\/(matchmake|rooms|health|stats|client-error)(\/|$)/;
 
 self.addEventListener('install', () => self.skipWaiting());
 

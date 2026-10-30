@@ -25,9 +25,9 @@ npm test             # simulation tests
 npm run typecheck
 ```
 
-- Open `http://localhost:5173`: the title menu offers a solo game (1v1 to 4v4 with bots), creating an online game, joining one by room code (or pasted invite link) and setting your name.
-- Online rooms: the host picks the mode (All Pick, All Random, Single Draft, All Prophet), adds bots and starts; others pick team and builder and get ready. Friends on your network use your LAN IP instead of localhost.
-- Deep links: `?room=CODE` joins, `?online` creates a room, `?builder=grove&size=2&mode=ar` (`ap`, `ar`, `sd`, `apr`) starts a solo game directly.
+- Open `http://localhost:5173`: the title menu offers a solo game (1v1 to 4v4 with bots), creating an online game (with a name, public or private), joining one from the list of open public games or by room code (or pasted invite link), and setting your name.
+- Online rooms: the host picks the mode (All Pick, All Random, Single Draft, All Prophet), adds bots, switches the room between public (listed for everyone) and private (code/link only) and starts; others pick team and builder and get ready. Friends on your network use your LAN IP instead of localhost.
+- Deep links: `?room=CODE` joins, `?online` creates a private room, `?builder=grove&size=2&mode=ar` (`ap`, `ar`, `sd`, `apr`) starts a solo game directly.
 - Dev options: `?fast` (short build phases), `?timeout` (setTimeout game loop for throttled/background windows).
 - Server smoke test: `cd server && npx tsx scripts/smoke.ts` (with the server running).
 
