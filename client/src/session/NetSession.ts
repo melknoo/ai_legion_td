@@ -3,6 +3,7 @@ import {
   UNIT_KINDS,
   decodeEvents,
   type CommandResult,
+  type EventBatch,
   type GameData,
   type GameEvent,
   type GameView,
@@ -13,14 +14,13 @@ import {
   type TeamId,
   type UnitDef,
   type UnitState,
-  type WireEvent,
 } from '@legion/shared';
 import type { Session } from './Session.ts';
 
 /** Loose shape of the synced schema state (see server/src/schema.ts). */
 interface NetStateLike {
   status: string;
-  players: Iterable<{ sessionId: string; name: string; team: number; builder: string; gold: number; lumber: number; income: number; workers: number; leaks: number; foodCap: number; farmLevel: number; fighters?: Iterable<string>; rerolls?: number; queuedSends?: Iterable<string> }>;
+  players: Iterable<NetPlayerLike>;
   units: { forEach(cb: (n: NetUnitLike, key: string) => void): void };
   phase: string;
   wave: number;
@@ -28,6 +28,23 @@ interface NetStateLike {
   phaseEndsAtMs: number;
   winner: number;
   kingLevels: Iterable<number>;
+}
+
+interface NetPlayerLike {
+  sessionId: string;
+  name: string;
+  team: number;
+  builder: string;
+  gold: number;
+  lumber: number;
+  income: number;
+  workers: number;
+  leaks: number;
+  foodCap: number;
+  farmLevel: number;
+  fighters?: Iterable<string>;
+  rerolls?: number;
+  queuedSends?: Iterable<string>;
 }
 
 interface NetUnitLike {
@@ -161,22 +178,64 @@ export class NetGameView implements GameView {
   }
 }
 
-/** A game running on the server: commands go up, state patches and event batches come down. */
+/** How far behind the server the client plays the match: one patch interval plus room for jitter. */
+const PLAYOUT_MS = 150;
+/** Further off than this (start, background tab), the playback clock jumps instead of easing. */
+const CLOCK_SNAP_MS = 500;
+
+/** A frozen copy of one state patch; the live schema keeps changing under it. */
+interface Snapshot extends NetStateLike {
+  units: Map<string, NetUnitLike>;
+}
+
+function snapshot(s: NetStateLike): Snapshot {
+  const units = new Map<string, NetUnitLike>();
+  s.units.forEach((n, key) => units.set(key, {
+    def: n.def, kind: n.kind, owner: n.owner, team: n.team, area: n.area, x: n.x, y: n.y, hp: n.hp, maxHp: n.maxHp,
+    dead: n.dead, target: n.target, col: n.col, row: n.row, invested: n.invested, fresh: n.fresh, leaked: n.leaked,
+    modDamage: n.modDamage, modArmor: n.modArmor, status: n.status,
+  }));
+  return {
+    status: s.status,
+    players: [...s.players].map((p) => ({ ...p, fighters: [...(p.fighters ?? [])], queuedSends: [...(p.queuedSends ?? [])] })),
+    units,
+    phase: s.phase,
+    wave: s.wave,
+    timeMs: s.timeMs,
+    phaseEndsAtMs: s.phaseEndsAtMs,
+    winner: s.winner,
+    kingLevels: [...s.kingLevels],
+  };
+}
+
+/**
+ * A game running on the server: commands go up, state patches and event batches come down.
+ * Patches and events are buffered and played back a fixed PLAYOUT_MS behind the server, each at
+ * the sim time it happened, so shots, hits and positions stay in step instead of arriving in clumps.
+ */
 export class NetSession implements Session {
   readonly game: NetGameView;
   readonly online = true;
   onError?: (message: string) => void;
-  private events: GameEvent[] = [];
-  private readonly render = new Map<number, { x: number; y: number; area: number }>();
+  private readonly snapshots: Snapshot[] = [];
+  private readonly events: { t: number; events: GameEvent[] }[] = [];
+  /** The snapshot the game view shows; positions ease towards the next queued one. */
+  private shown: Snapshot;
+  /** Playback time on the server's sim clock. */
+  private clock: number;
 
   constructor(
     readonly room: Room,
     data: GameData,
   ) {
     this.game = new NetGameView(data);
-    this.game.sync(room.state as NetStateLike);
-    room.onStateChange((s) => this.game.sync(s as NetStateLike));
-    room.onMessage('ev', (wire: WireEvent[]) => this.events.push(...decodeEvents(wire)));
+    this.shown = snapshot(room.state as NetStateLike);
+    this.game.sync(this.shown);
+    this.clock = this.shown.timeMs - PLAYOUT_MS;
+    room.onStateChange((s) => this.snapshots.push(snapshot(s as NetStateLike)));
+    room.onMessage('ev', (batch: EventBatch) => {
+      for (const [t, wire] of batch) this.events.push({ t, events: decodeEvents(wire) });
+    });
     room.onMessage('err', (message: string) => this.onError?.(message));
   }
 
@@ -185,27 +244,33 @@ export class NetSession implements Session {
   }
 
   update(deltaMs: number): GameEvent[] {
-    // State arrives ~10 times a second; ease render positions towards it.
-    const k = 1 - Math.exp(-deltaMs / 70);
-    for (const u of this.game.units.values()) {
-      const r = this.render.get(u.id);
-      if (!r || r.area !== u.area) this.render.set(u.id, { x: u.x, y: u.y, area: u.area });
-      else {
-        r.x += (u.x - r.x) * k;
-        r.y += (u.y - r.y) * k;
-      }
-    }
-    for (const id of this.render.keys()) if (!this.game.units.has(id)) this.render.delete(id);
-    const out = this.events;
-    this.events = [];
+    // Run slightly faster or slower to hold the playback PLAYOUT_MS behind the newest patch.
+    const latest = this.snapshots.at(-1) ?? this.shown;
+    const drift = latest.timeMs - PLAYOUT_MS - this.clock;
+    if (Math.abs(drift) > CLOCK_SNAP_MS) this.clock += drift;
+    else this.clock += deltaMs * (1 + Math.max(-0.1, Math.min(0.1, drift / 500)));
+
+    const before = this.shown;
+    while (this.snapshots[0] && this.snapshots[0].timeMs <= this.clock) this.shown = this.snapshots.shift()!;
+    if (this.shown !== before) this.game.sync(this.shown);
+
+    const out: GameEvent[] = [];
+    while (this.events[0] && this.events[0].t <= this.clock) out.push(...this.events.shift()!.events);
     return out;
   }
 
   interpolated(unitId: number): { x: number; y: number } | null {
-    const r = this.render.get(unitId);
-    if (r) return r;
-    const u = this.game.units.get(unitId);
-    return u ? { x: u.x, y: u.y } : null;
+    const key = String(unitId);
+    const a = this.shown.units.get(key);
+    if (!a) {
+      const u = this.game.units.get(unitId);
+      return u ? { x: u.x, y: u.y } : null;
+    }
+    const next = this.snapshots[0];
+    const b = next?.units.get(key);
+    if (!next || !b || b.area !== a.area || next.timeMs <= this.shown.timeMs) return { x: a.x, y: a.y };
+    const k = Math.max(0, Math.min(1, (this.clock - this.shown.timeMs) / (next.timeMs - this.shown.timeMs)));
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
   }
 
   send(cmd: PlayerCommand): CommandResult {

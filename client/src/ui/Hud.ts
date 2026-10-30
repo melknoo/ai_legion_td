@@ -83,8 +83,10 @@ const QUEUE_GROUPS = 10;
 const BODY_LINES = 4;
 /** King HP bars in the top bar; the next-wave button sits right of them. */
 const KING_BAR = { x: 280, w: 96 };
-/** Gold gains within this window pop up as one "+N" at the gold counter. */
-const GOLD_POP_MS = 300;
+/** Gold/lumber gains within this window pop up as one "+N" at their counter. */
+const RES_POP_MS = 300;
+/** Where each counter sits and how its "+N" is tinted. */
+const RES_POP = { gold: { x: 356, tint: 0xffe040 }, lumber: { x: 418, tint: 0x90e070 } } as const;
 
 /** Bottom command panels and top status bar, mouse and keyboard driven. */
 export class Hud {
@@ -118,9 +120,10 @@ export class Hud {
   /** The wave preview stays in the info panel until clicked again (or a unit gets selected). */
   private wavePinned = false;
   private lastSelected: number | null = null;
-  private lastGold: number | null = null;
-  private goldPending = 0;
-  private goldPendingSince = 0;
+  private readonly resPop: Record<keyof typeof RES_POP, { last: number | null; pending: number; since: number }> = {
+    gold: { last: null, pending: 0, since: 0 },
+    lumber: { last: null, pending: 0, since: 0 },
+  };
   private readonly actions: SlotButton[];
   private actionTargets: ({ kind: 'upgrade'; to: string } | { kind: 'sell' })[] = [];
   private readonly res: Record<'gold' | 'lumber' | 'income' | 'food', Phaser.GameObjects.BitmapText>;
@@ -341,7 +344,8 @@ export class Hud {
     this.res.lumber.setText(String(me.lumber));
     this.res.income.setText(`INC+${me.income}`);
     this.res.food.setText(`${g.foodUsed(this.player)}/${me.foodCap}`);
-    this.popGold(me.gold);
+    this.popRes('gold', me.gold);
+    this.popRes('lumber', me.lumber);
     const r = g.data.rules;
     this.worker.setContent('btn-worker', `${me.workers}`, { corner: 'B' }).setState(me.gold >= r.workerCost && me.workers < r.maxWorkers);
     const farm = r.farms[me.farmLevel];
@@ -675,19 +679,20 @@ export class Hud {
     b.text.setText(wave ? `W${n}\n${wave.count}X` : 'END');
   }
 
-  /** Every gold gain (bounty, income, bonus, refund) rises as "+N" next to the gold counter. */
-  private popGold(gold: number): void {
+  /** Every gold or lumber gain (bounty, income, wisps, refund) rises as "+N" next to its counter. */
+  private popRes(kind: keyof typeof RES_POP, value: number): void {
     const now = this.scene.time.now;
-    if (this.lastGold !== null && gold > this.lastGold) {
-      if (!this.goldPending) this.goldPendingSince = now;
-      this.goldPending += gold - this.lastGold;
+    const p = this.resPop[kind];
+    if (p.last !== null && value > p.last) {
+      if (!p.pending) p.since = now;
+      p.pending += value - p.last;
     }
-    this.lastGold = gold;
-    if (!this.goldPending || now - this.goldPendingSince < GOLD_POP_MS) return;
-    const x = 356 + String(gold).length * 8 + 4;
-    const t = this.scene.add.bitmapText(x, 190, FONT, `+${this.goldPending}`).setTint(0xffe040).setDepth(10);
+    p.last = value;
+    if (!p.pending || now - p.since < RES_POP_MS) return;
+    const x = RES_POP[kind].x + String(value).length * 8 + 4;
+    const t = this.scene.add.bitmapText(x, 190, FONT, `+${p.pending}`).setTint(RES_POP[kind].tint).setDepth(10);
     this.scene.tweens.add({ targets: t, y: 182, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
-    this.goldPending = 0;
+    p.pending = 0;
   }
 
   /** Live creeps and sends per defending team, by the area they are in (lanes and king arenas). */

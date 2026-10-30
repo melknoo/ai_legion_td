@@ -10,6 +10,7 @@ import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoi
 import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
+import { SoloReport } from '../soloReport.ts';
 import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
@@ -67,11 +68,15 @@ export class BattleScene extends Phaser.Scene {
   private session!: Session;
   /** Solo setup, kept for "play again"; null online. */
   private solo: SoloConfig | null = null;
+  /** Tells the server's stats page about this solo game; null online. */
+  private soloReport: SoloReport | null = null;
   /** Index of the local player in the game. */
   private me = 0;
   /** Online builds appear with the next state patch; select them once they do. */
   private pendingSelect: { col: number; row: number; until: number } | null = null;
   private views = new Map<number, UnitView>();
+  /** When this frame's shots land, by "source:target"; their damage flashes and numbers wait for it. */
+  private readonly landing = new Map<string, number>();
   /** Selectable views: own lane, own king, opponent lane, opponent king. */
   private viewList: HudView[] = [];
   /** Area currently shown (a lane index or a king arena). */
@@ -187,10 +192,16 @@ export class BattleScene extends Phaser.Scene {
 
     this.setupInput();
     this.setView(this.me);
+
+    this.soloReport = this.solo ? new SoloReport(this.session.game, this.solo) : null;
+    // Menu or play again before the end: the game was left.
+    this.events.once('shutdown', () => this.soloReport?.end(null, true));
   }
 
   override update(_time: number, delta: number): void {
     const events = this.session.update(delta);
+    // A tick's attack and the damage it deals arrive together, so landings only live for one frame.
+    this.landing.clear();
     for (const ev of events) this.handleEvent(ev);
     this.updateCamera(delta / 1000);
     // Units move under a resting mouse, so re-check the hover target every frame. A finger
@@ -689,8 +700,12 @@ export class BattleScene extends Phaser.Scene {
         // The target may already be gone (killing blow), so aim at the position the event carries.
         const a = game.units.get(ev.unitId);
         if (!a || a.area !== this.viewArea) return;
-        const from = this.toField(a.x, a.y);
-        const to = this.toField(ev.x, ev.y);
+        // Aim from and at where the sprites are drawn, not the raw sim positions.
+        const src = this.session.interpolated(a.id) ?? a;
+        const target = game.units.get(ev.targetId);
+        const dst = (target?.area === a.area && this.session.interpolated(target.id)) || ev;
+        const from = this.toField(src.x, src.y);
+        const to = this.toField(dst.x, dst.y);
         const view = this.views.get(a.id);
         if (!view) return;
         const dir = to.x >= from.x ? 1 : -1;
@@ -719,20 +734,31 @@ export class BattleScene extends Phaser.Scene {
         const { impact, ...shot } = attackStyle(game.data, def);
         sfx(this, ranged ? SHOT_SOUND[shot.shot ?? 'arrow'] : (FX_SOUND[impact ?? 'cut'] ?? 'hit'));
         if (!ranged) this.playFx(impact ?? 'cut', to.x, to.y - 6);
-        else projectile(this, shot, from.x + 6 * dir, from.y - 8, to.x, to.y - 6, impact && (() => this.playFx(impact, to.x, to.y - 6, 0.7)));
+        else {
+          const flight = projectile(this, shot, from.x + 6 * dir, from.y - 8, to.x, to.y - 6, impact && (() => this.playFx(impact, to.x, to.y - 6, 0.7)));
+          this.landing.set(`${a.id}:${ev.targetId}`, this.time.now + flight);
+        }
         return;
       }
       case 'damage': {
         const t = game.units.get(ev.targetId);
         const view = this.views.get(ev.targetId);
         if (!t || !view || t.area !== this.viewArea) return;
-        // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
-        if (this.time.now > view.flashUntil + FLASH_GAP_MS) {
-          view.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-          view.flashUntil = this.time.now + 70;
-        }
-        const s = this.toField(t.x, t.y);
-        this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
+        const at = { x: t.x, y: t.y };
+        const show = () => {
+          // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
+          if (this.views.get(ev.targetId) === view && this.time.now > view.flashUntil + FLASH_GAP_MS) {
+            view.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+            view.flashUntil = this.time.now + 70;
+          }
+          const p = this.session.interpolated(ev.targetId) ?? at;
+          const s = this.toField(p.x, p.y);
+          this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
+        };
+        // Ranged hits show when the shot lands, not when it leaves the bow.
+        const wait = (this.landing.get(`${ev.sourceId}:${ev.targetId}`) ?? 0) - this.time.now;
+        if (wait > 0) this.time.delayedCall(wait, show);
+        else show();
         return;
       }
       case 'death': {
@@ -767,6 +793,7 @@ export class BattleScene extends Phaser.Scene {
         if (ev.phase === 'fight') {
           this.slotMode = 'send';
           this.selectedBuild = null;
+          this.soloReport?.wave();
         }
         const prev = this.lastPhase;
         this.lastPhase = ev.phase;
@@ -825,6 +852,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'gameOver':
+        this.soloReport?.end(ev.winner, false);
         this.showGameOver(ev.winner);
         return;
       default:

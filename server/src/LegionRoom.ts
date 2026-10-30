@@ -14,8 +14,8 @@ import {
   rollBuilders,
   rollableBuilders,
   roomTitle,
+  type EventBatch,
   type GameData,
-  type GameEvent,
   type JoinOptions,
   type ModeId,
   type PlayerCommand,
@@ -26,7 +26,7 @@ import { log, monitor } from './monitor.ts';
 import { NetPlayer, NetState, NetUnit } from './schema.ts';
 
 const COMMANDS = new Set(['build', 'upgrade', 'sell', 'sendMerc', 'buyWorker', 'upgradeKing', 'upgradeFarm', 'reroll']);
-/** Ticks between event broadcasts; matches the 100 ms patch rate. */
+/** Ticks between event broadcasts; each tick's events carry its sim time, clients play them back in step. */
 const EVENT_EVERY = 2;
 /** Open rooms on this one instance; each running match costs a 20 Hz sim with bots. */
 const MAX_ROOMS = Number(process.env.MAX_ROOMS ?? 40);
@@ -49,14 +49,13 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
 
   private game: Game | null = null;
   private data: GameData = LEGION_DATA;
-  private timer: { clear(): void } | null = null;
   /** Address of each connected session, for the per-address cap. */
   private ips = new Map<string, string>();
   /** Counted in `openRooms`; a room turned away in onCreate still gets disposed. */
   private counted = false;
   /** Requested game name, applied once the host's own name is known. */
   private requestedTitle = '';
-  private pending: GameEvent[] = [];
+  private pending: EventBatch = [];
   private ticks = 0;
 
   override onCreate(options: JoinOptions): void {
@@ -184,7 +183,7 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
   }
 
   override onDispose(): void {
-    this.timer?.clear();
+    this.setTimestep();
     if (this.counted) openRooms--;
     for (const id of [...this.ips.keys()]) this.release(id);
     // Closed while the game still ran: everyone left.
@@ -196,9 +195,8 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
   override onUncaughtException(error: RoomException, method: string): void {
     if (error.cause instanceof ServerError) return; // our own rejections (server full, too many connections)
     log('room.error', { room: this.roomId, method, error: error.message, stack: error.stack });
-    if (method === 'setInterval' && this.game) {
-      this.timer?.clear();
-      this.timer = null;
+    if (method === 'setFixedTimestep' && this.game) {
+      this.setTimestep();
       this.broadcast('err', 'the match crashed, sorry');
       void this.disconnect();
     }
@@ -256,27 +254,30 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
     });
     void this.lock();
     this.syncState();
-    this.timer = this.clock.setInterval(() => this.tick(), TICK_MS);
+    // Fixed steps with catch-up: `clock.setInterval` only advances with each 100 ms patch (half speed),
+    // and a plain interval drifts with the OS timer resolution (Windows: 50 ms fires every ~62 ms).
+    this.setFixedTimestep(() => this.tick(), 1000 / TICK_MS);
   }
 
   private tick(): void {
     const game = this.game;
-    if (!game) return;
+    // A catch-up step can still run in the same interval call that ended the match.
+    if (!game || this.state.status === 'over') return;
     this.state.players.forEach((p, i) => {
       if (p.bot || !p.connected) for (const cmd of botCommands(game, i)) game.apply(cmd);
     });
-    this.pending.push(...game.tick());
+    const events = game.tick();
+    if (events.length) this.pending.push([game.timeMs, encodeEvents(events)]);
     this.syncState();
     monitor.wave(this.roomId, game.wave);
     if (++this.ticks % EVENT_EVERY === 0 && this.pending.length) {
-      this.broadcast('ev', encodeEvents(this.pending), { afterNextPatch: true });
+      this.broadcast('ev', this.pending);
       this.pending = [];
     }
     if (game.phase === 'over') {
       this.state.status = 'over';
-      this.timer?.clear();
-      this.timer = null;
-      if (this.pending.length) this.broadcast('ev', encodeEvents(this.pending), { afterNextPatch: true });
+      this.setTimestep();
+      if (this.pending.length) this.broadcast('ev', this.pending);
       this.pending = [];
       monitor.gameEnded(this.roomId, { wave: game.wave, winner: game.winner, abandoned: false, builders: this.builders() });
     }

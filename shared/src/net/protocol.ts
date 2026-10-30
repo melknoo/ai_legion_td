@@ -93,6 +93,8 @@ export function rollBuilders(builders: readonly string[], count: number, random:
 
 /** Visual events sent to clients as compact number arrays; state changes travel via schema patches. */
 export type WireEvent = number[];
+/** One `ev` message: the events of each tick since the last one, tagged with that tick's sim time. */
+export type EventBatch = [timeMs: number, events: WireEvent[]][];
 
 const ATTACK = 0;
 const DAMAGE = 1;

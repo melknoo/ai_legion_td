@@ -129,8 +129,8 @@ export function weaponSwing(scene: Phaser.Scene, trails: SwingTrails, key: Weapo
 /** Glowing projectiles; solid ones (rock, cannonball, leaves, steel) keep normal blending. */
 const GLOW_SHOTS = new Set<string>(['energy', 'fireball', 'icespike']);
 
-/** Projectile flying from attacker to target in the attacker's style; `onHit` runs where it lands. */
-export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, y0: number, x1: number, y1: number, onHit?: () => void): void {
+/** Projectile flying from attacker to target in the attacker's style; `onHit` runs where it lands. Returns the flight time. */
+export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, y0: number, x1: number, y1: number, onHit?: () => void): number {
   const angle = Math.atan2(y1 - y0, x1 - x0);
   const duration = Math.max(60, Math.hypot(x1 - x0, y1 - y0) * 4);
   const shot = style.shot ?? 'arrow';
@@ -159,4 +159,5 @@ export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, 
       onHit?.();
     },
   });
+  return duration;
 }

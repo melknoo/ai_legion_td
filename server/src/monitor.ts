@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { LEGION_DATA, MAX_TEAM_SIZE, MODE_IDS, type ModeId } from '@legion/shared';
 
 // Monitoring for the single home-server instance: JSON log lines on stdout (`docker logs`),
-// a public /health for uptime checks, a password-protected /stats page, and /client-error
-// for browser exceptions. Everything is in memory except the optional game history file.
+// a public /health for uptime checks, a password-protected /stats page, /client-error
+// for browser exceptions and /solo for solo games (they run in the browser). Everything is
+// in memory except the optional game history file.
 
 /** Finished or abandoned games are appended here as JSON lines when set (a mounted volume). */
 const STATS_FILE = process.env.STATS_FILE;
@@ -14,6 +16,13 @@ const STATS_TOKEN = process.env.STATS_TOKEN;
 const ERROR_LIMIT_PER_MIN = 10;
 const ERROR_BODY_MAX = 4096;
 const RECENT_MAX = 30;
+/** Solo reports per address and minute: a start, one per wave and an end, so a few games' worth. */
+const SOLO_LIMIT_PER_MIN = 30;
+const SOLO_BODY_MAX = 1024;
+/** Solo games listed as running at most; a flood of fake ids can't grow the map further. */
+const SOLO_MAX = 200;
+/** A solo game reports every wave; silence this long means the tab is gone. */
+const SOLO_IDLE_MS = 20 * 60_000;
 
 export function log(event: string, fields: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ t: new Date().toISOString(), event, ...fields }));
@@ -44,6 +53,18 @@ export interface GameRecord {
   /** The room closed before the game was over (everyone left). */
   abandoned: boolean;
   minutes: number;
+  /** Played in the browser against bots; reported by the client. */
+  solo?: boolean;
+}
+
+/** A solo game still running, as its last report described it. */
+interface SoloInfo {
+  mode: ModeId;
+  bots: number;
+  builders: string[];
+  wave: number;
+  timeMs: number;
+  lastSeen: number;
 }
 
 interface ClientError {
@@ -56,15 +77,27 @@ interface ClientError {
 
 const startedAt = Date.now();
 const rooms = new Map<string, RoomInfo>();
-const totals = { gamesStarted: 0, gamesFinished: 0, gamesAbandoned: 0, peakPlayers: 0, clientErrors: 0 };
+const totals = { gamesStarted: 0, gamesFinished: 0, gamesAbandoned: 0, peakPlayers: 0, clientErrors: 0, soloStarted: 0 };
 const builderPicks = new Map<string, number>();
 const recentGames: GameRecord[] = [];
 const recentErrors: ClientError[] = [];
-const errorBudget = new Map<string, { count: number; resetAt: number }>();
+const soloGames = new Map<string, SoloInfo>();
+type Budget = Map<string, { count: number; resetAt: number }>;
+const errorBudget: Budget = new Map();
+const soloBudget: Budget = new Map();
 
 function pushRecent<T>(list: T[], item: T): void {
   list.unshift(item);
   if (list.length > RECENT_MAX) list.pop();
+}
+
+/** Adds a finished or abandoned game to the recent list, the log and the history file. */
+function recordGame(record: GameRecord): void {
+  pushRecent(recentGames, record);
+  log(`${record.solo ? 'solo' : 'game'}.${record.abandoned ? 'abandon' : 'end'}`, { ...record });
+  if (STATS_FILE) {
+    fs.appendFile(STATS_FILE, JSON.stringify(record) + '\n', (err) => err && log('stats.write-failed', { error: err.message }));
+  }
 }
 
 function playersOnline(): number {
@@ -121,11 +154,7 @@ export const monitor = {
       abandoned: result.abandoned,
       minutes: Math.round((Date.now() - (r.startedAt ?? Date.now())) / 6000) / 10,
     };
-    pushRecent(recentGames, record);
-    log(result.abandoned ? 'game.abandon' : 'game.end', { ...record });
-    if (STATS_FILE) {
-      fs.appendFile(STATS_FILE, JSON.stringify(record) + '\n', (err) => err && log('stats.write-failed', { error: err.message }));
-    }
+    recordGame(record);
   },
 
   roomDisposed(id: string): void {
@@ -157,27 +186,27 @@ function clientIp(req: IncomingMessage): string {
   return (typeof cf === 'string' && cf) || req.socket.remoteAddress || '?';
 }
 
-function withinBudget(ip: string): boolean {
+function withinBudget(budget: Budget, ip: string, limit: number): boolean {
   const now = Date.now();
-  const b = errorBudget.get(ip);
+  const b = budget.get(ip);
   if (!b || now >= b.resetAt) {
     // Drop stale entries now and then so the map can't grow without bound.
-    if (errorBudget.size > 1000) for (const [k, v] of errorBudget) if (now >= v.resetAt) errorBudget.delete(k);
-    errorBudget.set(ip, { count: 1, resetAt: now + 60_000 });
+    if (budget.size > 1000) for (const [k, v] of budget) if (now >= v.resetAt) budget.delete(k);
+    budget.set(ip, { count: 1, resetAt: now + 60_000 });
     return true;
   }
-  return ++b.count <= ERROR_LIMIT_PER_MIN;
+  return ++b.count <= limit;
 }
 
-function clientError(req: IncomingMessage, res: ServerResponse): void {
-  if (!withinBudget(clientIp(req))) return void res.writeHead(429).end();
+/** Reads a small JSON object body; answers 413/400 itself when it is too big or not an object. */
+function readJson(req: IncomingMessage, res: ServerResponse, max: number, then: (data: Record<string, unknown>) => void): void {
   let body = '';
   let tooBig = false;
   req.setEncoding('utf8');
   req.on('data', (chunk: string) => {
     if (tooBig) return; // drain the rest unread
     body += chunk;
-    if (body.length > ERROR_BODY_MAX) {
+    if (body.length > max) {
       tooBig = true;
       body = '';
       res.writeHead(413, { Connection: 'close' }).end();
@@ -185,12 +214,20 @@ function clientError(req: IncomingMessage, res: ServerResponse): void {
   });
   req.on('end', () => {
     if (tooBig) return;
-    let data: Record<string, unknown>;
+    let data: unknown;
     try {
-      data = JSON.parse(body) as Record<string, unknown>;
+      data = JSON.parse(body);
     } catch {
       return void res.writeHead(400).end();
     }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return void res.writeHead(400).end();
+    then(data as Record<string, unknown>);
+  });
+}
+
+function clientError(req: IncomingMessage, res: ServerResponse): void {
+  if (!withinBudget(errorBudget, clientIp(req), ERROR_LIMIT_PER_MIN)) return void res.writeHead(429).end();
+  readJson(req, res, ERROR_BODY_MAX, (data) => {
     const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
     const entry: ClientError = {
       t: new Date().toISOString(),
@@ -202,6 +239,74 @@ function clientError(req: IncomingMessage, res: ServerResponse): void {
     totals.clientErrors++;
     pushRecent(recentErrors, entry);
     log('client.error', { ...entry });
+    res.writeHead(204).end();
+  });
+}
+
+function soloRecord(id: string, info: SoloInfo, winner: number | null, abandoned: boolean): GameRecord {
+  return {
+    t: new Date().toISOString(),
+    room: `solo-${id}`,
+    mode: info.mode,
+    humans: 1,
+    bots: info.bots,
+    builders: info.builders,
+    wave: info.wave,
+    winner,
+    abandoned,
+    minutes: Math.round(info.timeMs / 6000) / 10,
+    solo: true,
+  };
+}
+
+/** Solo games whose tab went quiet count as abandoned. */
+function pruneSolo(): void {
+  const now = Date.now();
+  for (const [id, info] of soloGames) {
+    if (now - info.lastSeen < SOLO_IDLE_MS) continue;
+    soloGames.delete(id);
+    recordGame(soloRecord(id, info, null, true));
+  }
+}
+
+const isInt = (v: unknown, min: number, max: number): v is number => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
+
+/**
+ * A solo game's client reports its start, each wave and its end (or that the player left).
+ * Anyone can post here, so every field is checked against the game data and the rate is capped.
+ */
+function soloReport(req: IncomingMessage, res: ServerResponse): void {
+  if (!withinBudget(soloBudget, clientIp(req), SOLO_LIMIT_PER_MIN)) return void res.writeHead(429).end();
+  readJson(req, res, SOLO_BODY_MAX, (d) => {
+    const { id, event, mode, size, builders, wave, timeMs, winner, abandoned } = d;
+    const valid =
+      typeof id === 'string' && /^[a-z0-9]{6,16}$/.test(id) &&
+      (event === 'start' || event === 'wave' || event === 'end') &&
+      MODE_IDS.includes(mode as ModeId) &&
+      isInt(size, 1, MAX_TEAM_SIZE) &&
+      Array.isArray(builders) && builders.length === size * 2 &&
+      builders.every((b) => typeof b === 'string' && Object.hasOwn(LEGION_DATA.builders, b)) &&
+      isInt(wave, 1, LEGION_DATA.waves.length + 1) &&
+      isInt(timeMs, 0, 24 * 3_600_000) &&
+      (winner === undefined || winner === null || winner === 0 || winner === 1) &&
+      (abandoned === undefined || typeof abandoned === 'boolean');
+    if (!valid) return void res.writeHead(400).end();
+    pruneSolo();
+    const known = soloGames.has(id);
+    if (!known && event !== 'end' && soloGames.size >= SOLO_MAX) return void res.writeHead(503).end();
+    const info: SoloInfo = { mode: mode as ModeId, bots: size * 2 - 1, builders: builders as string[], wave, timeMs, lastSeen: Date.now() };
+    if (event === 'end') {
+      soloGames.delete(id);
+      recordGame(soloRecord(id, info, (winner as 0 | 1 | null | undefined) ?? null, abandoned === true));
+    } else {
+      soloGames.set(id, info);
+      // A wave report after a server restart picks the game up again without counting a new start.
+      if (!known && event === 'start') {
+        totals.soloStarted++;
+        for (const b of info.builders) builderPicks.set(b, (builderPicks.get(b) ?? 0) + 1);
+        log('solo.start', { solo: id, mode: info.mode, bots: info.bots, builders: info.builders });
+      }
+    }
     res.writeHead(204).end();
   });
 }
@@ -252,6 +357,7 @@ function stats(req: IncomingMessage, res: ServerResponse): void {
   }
   const days = new Map<string, number>();
   for (const g of allGames) days.set(g.t.slice(0, 10), (days.get(g.t.slice(0, 10)) ?? 0) + 1);
+  pruneSolo();
   const uptimeH = ((Date.now() - startedAt) / 3_600_000).toFixed(1);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Legion stats</title><style>
@@ -264,10 +370,12 @@ th{background:#1c1c58}td{font-variant-numeric:tabular-nums}.none{color:#888}
 </style></head><body><h1>Legion Pixel – server stats</h1>
 <div class="kpi"><div>uptime ${esc(uptimeH)} h</div><div>rooms ${rooms.size}</div><div>players now ${playersOnline()}</div>
 <div>peak players ${totals.peakPlayers}</div><div>games started ${totals.gamesStarted}</div><div>finished ${totals.gamesFinished}</div>
-<div>abandoned ${totals.gamesAbandoned}</div><div>client errors ${totals.clientErrors}</div></div>
+<div>abandoned ${totals.gamesAbandoned}</div><div>solo now ${soloGames.size}</div><div>solo started ${totals.soloStarted}</div>
+<div>client errors ${totals.clientErrors}</div></div>
 <p class="none">Counters since the last restart; tables below use the history file when one is set.</p>
 <h2>Open rooms</h2>${table(['room', 'status', 'mode', 'humans', 'bots', 'wave'], [...rooms].map(([id, r]) => [id, r.status, r.mode, r.humans, r.bots, r.wave]))}
-<h2>Recent games</h2>${table(['time (UTC)', 'mode', 'humans', 'bots', 'builders', 'wave', 'winner', 'min'], games.map((g) => [g.t.slice(0, 16).replace('T', ' '), g.mode, g.humans, g.bots, g.builders.join(', '), g.wave, g.abandoned ? 'abandoned' : g.winner ?? 'draw', g.minutes]))}
+<h2>Solo games now</h2>${table(['game', 'mode', 'bots', 'builders', 'wave', 'min', 'last report'], [...soloGames].map(([id, g]) => [id, g.mode, g.bots, g.builders.join(', '), g.wave, Math.round(g.timeMs / 6000) / 10, `${Math.round((Date.now() - g.lastSeen) / 1000)} s ago`]))}
+<h2>Recent games</h2>${table(['time (UTC)', 'mode', 'humans', 'bots', 'builders', 'wave', 'winner', 'min'], games.map((g) => [g.t.slice(0, 16).replace('T', ' '), g.solo ? `solo ${g.mode}` : g.mode, g.humans, g.bots, g.builders.join(', '), g.wave, g.abandoned ? 'abandoned' : g.winner ?? 'draw', g.minutes]))}
 <h2>Games per day</h2>${table(['day', 'games'], [...days].sort().reverse().slice(0, 30))}
 <h2>Builder picks</h2>${table(['builder', 'picks'], [...picks].sort((a, b) => b[1] - a[1]))}
 <h2>Recent client errors</h2>${table(['time (UTC)', 'message', 'source', 'browser', 'stack'], recentErrors.map((e) => [e.t.slice(0, 19).replace('T', ' '), e.message, e.source, e.ua, e.stack]))}
@@ -276,13 +384,14 @@ th{background:#1c1c58}td{font-variant-numeric:tabular-nums}.none{color:#888}
   res.end(html);
 }
 
-/** Express-style middleware for /health, /stats and /client-error; everything else passes on. */
+/** Express-style middleware for /health, /stats, /client-error and /solo; everything else passes on. */
 export function monitorRoutes() {
   return (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
     const url = (req.url ?? '/').split('?')[0];
     if (url === '/health' && req.method === 'GET') return health(res);
     if (url === '/stats' && req.method === 'GET') return stats(req, res);
     if (url === '/client-error' && req.method === 'POST') return clientError(req, res);
+    if (url === '/solo' && req.method === 'POST') return soloReport(req, res);
     next();
   };
 }
