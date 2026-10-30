@@ -41,7 +41,9 @@ Controls (everything also works with the mouse via the HUD):
 - `Esc` / right click: cancel placement and selection
 - `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen
 - `SPACE`: jump to my lane (again: my king)
-- `O` or the `O` button in the field corner: options (sound on/off, volume, screen shake, tips); also on the title screen
+- `O` or the `O` button in the field corner: options (sound on/off, volume, screen shake, tips; turning tips back on replays them, HOW TO PLAY opens the rules pages); also on the title screen, which has its own HOW TO PLAY entry
+- Online: `Enter` team chat, `Shift+Enter` all chat (`Tab` switches while typing, `Esc` cancels); hotkeys pause while typing. The lobby has an all chat and a NAME button to rename yourself before the start
+- Every game opens with an intro card (who you are, team, goal); your own fighters, lane frame and names are gold, everyone else wears their team colour (WEST blue, EAST red)
 - `TAB` / view tabs: my lane, my king, foe lane, foe king; `R` restart after game over
 - The battlefield camera follows the fighting; pan with `←/→` or the mouse wheel. Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 3x
 
@@ -49,7 +51,7 @@ Phones and tablets (landscape; `client/src/ui/touch.ts`):
 - tap a button to press it, hold it (~0.35 s) for its tooltip
 - tap a slot, then tap a free tile twice (first tap previews, second builds); the slot stays armed until tapped again or a tap lands off the grid
 - tap a unit to select it, empty ground to deselect; swipe the field to pan; the end screen has PLAY AGAIN / MENU buttons
-- name and room code use a hidden DOM input over the field, so the on-screen keyboard opens
+- name, room code and chat use a hidden DOM input over the field, so the on-screen keyboard opens; in the game the `C` button next to `O` opens the chat, in the lobby tap the CHAT heading
 - installable as a PWA ("Add to home screen"): `client/public/manifest.webmanifest`, service worker `client/public/sw.js` (production builds only, one cache per build, solo games also start offline). Icons come from `node tools/make-icons.mjs`
 
 ## Hosting

@@ -7,6 +7,7 @@ import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
+import { howToPlay } from '../ui/howToPlay.ts';
 import { OPTION_ITEMS, clickStep } from '../ui/options.ts';
 import { onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
@@ -55,6 +56,8 @@ export class TitleScene extends Phaser.Scene {
   private solo: SoloConfig = { builder: BUILDERS[0]!, teamSize: 1, mode: 'ap' };
   private draft: string[] = [];
   private input_: TextInput | null = null;
+  /** Closes the open How to Play window; the menu ignores its keys meanwhile. */
+  private closeHelp: (() => void) | null = null;
   /** Hover only selects after the mouse moved; new panels appear under a resting pointer. */
   private mouseMoved = false;
   /** Solo panel: builder portrait and mode hint, refreshed every frame. */
@@ -83,13 +86,15 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.hand, x: '-=2', duration: 300, yoyo: true, repeat: -1 });
 
     const kb = this.input.keyboard!;
-    onKey(kb, 'keydown-UP', () => this.move(-1));
-    onKey(kb, 'keydown-DOWN', () => this.move(1));
-    onKey(kb, 'keydown-LEFT', () => this.items[this.index]?.change?.(-1));
-    onKey(kb, 'keydown-RIGHT', () => this.items[this.index]?.change?.(1));
-    onKey(kb, 'keydown-ENTER', () => !this.input_ && this.items[this.index]?.action?.());
-    onKey(kb, 'keydown-SPACE', () => !this.input_ && this.items[this.index]?.action?.());
-    onKey(kb, 'keydown-ESC', () => {
+    this.closeHelp = null;
+    const key = (event: string, fn: () => void) => onKey(kb, event, () => !this.closeHelp && fn());
+    key('keydown-UP', () => this.move(-1));
+    key('keydown-DOWN', () => this.move(1));
+    key('keydown-LEFT', () => this.items[this.index]?.change?.(-1));
+    key('keydown-RIGHT', () => this.items[this.index]?.change?.(1));
+    key('keydown-ENTER', () => !this.input_ && this.items[this.index]?.action?.());
+    key('keydown-SPACE', () => !this.input_ && this.items[this.index]?.action?.());
+    key('keydown-ESC', () => {
       if (this.panel === 'code') this.openList();
       else if (this.panel === 'title') this.show('create');
       else if (this.panel !== 'main') this.show('main');
@@ -134,10 +139,11 @@ export class TitleScene extends Phaser.Scene {
         { label: () => 'SOLO GAME', action: () => this.show('solo') },
         { label: () => 'CREATE ONLINE GAME', action: () => this.show('create') },
         { label: () => 'JOIN ONLINE GAME', action: () => this.openList() },
+        { label: () => 'HOW TO PLAY', action: () => this.openHelp() },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
         { label: () => 'OPTIONS', action: () => this.show('options') },
       ];
-      this.window(150, 146, 180, 80);
+      this.window(150, 146, 180, 94);
     } else if (panel === 'solo') {
       this.items = [
         { label: () => `MODE      < ${MODES[this.solo.mode].name} >`, change: (s) => this.cycleMode(s), action: () => this.cycleMode(1) },
@@ -203,6 +209,16 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /** Menu window with one line per item; `top` leaves room above the items. */
+  private openHelp(): void {
+    if (this.closeHelp) return;
+    // Closed in a later frame, so the Esc or click that closes it doesn't also reach the menu.
+    const close = howToPlay(this, () => {
+      close();
+      this.time.delayedCall(0, () => (this.closeHelp = null));
+    });
+    this.closeHelp = close;
+  }
+
   private window(x: number, y: number, w: number, h: number, top = 0): void {
     this.layer.add(ff6Window(this, x, y, w, h));
     this.lines = this.items.map((item, i) => {
@@ -300,11 +316,7 @@ export class TitleScene extends Phaser.Scene {
 
   private saveName(value: string): void {
     this.name = value.trim() || 'PLAYER';
-    try {
-      localStorage.setItem(NAME_KEY, this.name);
-    } catch {
-      // Storage may be unavailable (private mode); the name just isn't remembered.
-    }
+    storeName(this.name);
     this.show('main');
   }
 
@@ -350,10 +362,19 @@ function roomLabel(r: RoomListing): string {
   return `${r.title.slice(0, ROOM_TITLE_MAX).padEnd(ROOM_TITLE_MAX + 1)}${mode.padEnd(13)}${r.players}/${r.max}`;
 }
 
-function readName(): string {
+/** The player's remembered name (set in the menu or the lobby). */
+export function readName(): string {
   try {
     return localStorage.getItem(NAME_KEY) || 'PLAYER';
   } catch {
     return 'PLAYER';
+  }
+}
+
+export function storeName(name: string): void {
+  try {
+    localStorage.setItem(NAME_KEY, name);
+  } catch {
+    // Storage may be unavailable (private mode); the name just isn't remembered.
   }
 }

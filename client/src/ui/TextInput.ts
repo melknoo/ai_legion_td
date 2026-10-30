@@ -12,6 +12,8 @@ export interface TextInputOptions {
   initial?: string;
   upperCase?: boolean;
   onEnter?: (value: string) => void;
+  /** Turns pasted or IME text into what gets typed; by default an invite link becomes its room code. */
+  clean?: (raw: string) => string;
 }
 
 /**
@@ -28,9 +30,14 @@ export class TextInput {
   private readonly onPaste = (e: ClipboardEvent) => this.paste(e);
   private readonly dom: HTMLInputElement | null = null;
   private readonly place = () => this.placeDom();
+  /** Characters that fit the field; longer values scroll to show their end. */
+  private readonly fits: number;
+  private readonly clean: (raw: string) => string;
 
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, w: number, private readonly o: TextInputOptions) {
     this.value = o.initial ?? '';
+    this.fits = Math.floor((w - 10) / 8);
+    this.clean = o.clean ?? roomCode;
     this.bg = scene.add.image(x, y, panelTexture(scene, w, 16, 'slotActive')).setOrigin(0, 0);
     this.text = scene.add.bitmapText(x + 5, y + 5, FONT, '');
     this.cursor = scene.add.rectangle(0, y + 4, 6, 9, 0xfff080).setOrigin(0, 0);
@@ -60,6 +67,24 @@ export class TextInput {
     return this;
   }
 
+  get isActive(): boolean {
+    return this.active;
+  }
+
+  clear(): this {
+    this.value = '';
+    if (this.dom) this.dom.value = '';
+    this.render();
+    return this;
+  }
+
+  setDepth(depth: number): this {
+    this.bg.setDepth(depth);
+    this.text.setDepth(depth + 1);
+    this.cursor.setDepth(depth + 1);
+    return this;
+  }
+
   destroy(): void {
     this.dom?.remove();
     window.removeEventListener('resize', this.place);
@@ -80,7 +105,7 @@ export class TextInput {
 
   private paste(e: ClipboardEvent): void {
     if (!this.active || this.dom) return;
-    this.append(roomCode(e.clipboardData?.getData('text') ?? ''));
+    this.append(this.clean(e.clipboardData?.getData('text') ?? ''));
     this.render();
   }
 
@@ -92,7 +117,7 @@ export class TextInput {
     Object.assign(el.style, { position: 'fixed', display: 'none', margin: '0', padding: '0', border: '0', outline: 'none', fontSize: '16px', background: 'transparent', color: 'transparent', caretColor: 'transparent' });
     el.addEventListener('input', () => {
       this.value = '';
-      this.append(roomCode(el.value));
+      this.append(this.clean(el.value));
       el.value = this.value;
       this.render();
     });
@@ -129,8 +154,9 @@ export class TextInput {
   }
 
   private render(): void {
-    this.text.setText(this.value);
-    this.cursor.setX(this.text.x + this.value.length * 8);
+    const shown = this.value.slice(-this.fits);
+    this.text.setText(shown);
+    this.cursor.setX(this.text.x + shown.length * 8);
   }
 }
 

@@ -44,8 +44,8 @@ const ROW = 14;
  * In-game options window: click left or right of the middle between a line's arrows to step it; CLOSE (or O / Esc)
  * closes it. Returns a function that removes it.
  */
-export function optionsWindow(scene: Phaser.Scene, cx: number, cy: number, onClose: () => void): () => void {
-  const h = OPTION_ITEMS.length * ROW + 40;
+export function optionsWindow(scene: Phaser.Scene, cx: number, cy: number, onClose: () => void, onHelp?: () => void): () => void {
+  const h = OPTION_ITEMS.length * ROW + 40 + (onHelp ? 20 : 0);
   const x = Math.round(cx - W / 2);
   const y = Math.round(cy - h / 2);
   const depth = 21000;
@@ -63,6 +63,7 @@ export function optionsWindow(scene: Phaser.Scene, cx: number, cy: number, onClo
     parts.push(t, zone);
     return t;
   });
+  if (onHelp) parts.push(new TextButton(scene, x + W / 2 - 52, y + h - 41, 104, 'HOW TO PLAY', onHelp).setDepth(depth));
   parts.push(new TextButton(scene, x + W / 2 - 32, y + h - 21, 64, 'CLOSE', onClose).setDepth(depth));
   return () => parts.forEach((p) => p.destroy());
 }

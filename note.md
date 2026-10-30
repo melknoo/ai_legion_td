@@ -1,3 +1,2 @@
--chat
--einheiten sollen bei platzieren und vor kampfbeginn nicht mehr nach links gucken sondern nach unten
--besseres tutorial, neue spieler wissen nicht wer sie sind oder was abgeht.
+-die arena kommt ja direkt nachm boss. Da müsste man nochmal n timer haben wie nach jeder runde
+-wie komme ich wieder zu games zurück falls ich versehentlich reloade? 

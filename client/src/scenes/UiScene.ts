@@ -1,10 +1,14 @@
 import Phaser from 'phaser';
 import type { GameView } from '@legion/shared';
+import type { ChatLog } from '../net/ChatLog.ts';
+import { ChatBox } from '../ui/ChatBox.ts';
 import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
 import { MiniButton } from '../ui/SlotButton.ts';
 import { TextButton } from '../ui/TextButton.ts';
+import { howToPlay } from '../ui/howToPlay.ts';
+import { IntroCard } from '../ui/IntroCard.ts';
 import { optionsWindow } from '../ui/options.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { Tutorial } from '../ui/Tutorial.ts';
@@ -18,6 +22,8 @@ export interface UiLink {
   views: HudView[];
   actions: HudActions;
   state(): HudState;
+  /** Online games only. */
+  chat?: ChatLog;
 }
 
 /**
@@ -33,7 +39,10 @@ export class UiScene extends Phaser.Scene {
   private summary: Phaser.GameObjects.Container | null = null;
   private chart: Phaser.GameObjects.Container | null = null;
   private closeOptions: (() => void) | null = null;
+  private closeHelp: (() => void) | null = null;
   private choices: TextButton[] = [];
+  private chatBox: ChatBox | null = null;
+  private intro!: IntroCard;
 
   constructor() {
     super('ui');
@@ -44,18 +53,47 @@ export class UiScene extends Phaser.Scene {
     this.link = link;
     this.chart = null;
     this.closeOptions = null;
+    this.closeHelp = null;
     this.hud = new Hud(this, link.game, link.player, link.views, link.actions);
-    this.tutorial = new Tutorial(this, link.game);
+    this.tutorial = new Tutorial(this, link.game, link.player);
     this.fieldLabel = this.add.bitmapText(6, FIELD_TOP + 3, FONT, '');
     // Options in the top right corner of the battlefield (O).
     const size = TOUCH ? 16 : 13;
     new MiniButton(this, { x: VIEW_W - size - 3, y: FIELD_TOP + 3, size, touchPad: 2, text: 'O', onClick: () => this.toggleOptions(), onHover: () => {} });
-    this.showBanner(['BUILD PHASE']);
+    // Chat over the bottom left of the field (Enter: team, Shift+Enter: all), with a button for touch.
+    this.chatBox = link.chat
+      ? new ChatBox(this, link.chat, { x: 6, bottom: FIELD_TOP + FIELD_H - 1, cols: 56, rows: 6, inGame: true, team: () => link.game.players[link.player]!.team, depth: 19400 })
+      : null;
+    if (this.chatBox) {
+      const box = this.chatBox;
+      new MiniButton(this, { x: VIEW_W - 2 * (size + 3), y: FIELD_TOP + 3, size, touchPad: 2, text: 'C', onClick: () => box.toggle(), onHover: () => {} });
+    }
+    // Who you are and what to do; the tips start once it is closed.
+    this.intro = new IntroCard(this, link.game, link.player, () => this.openHelp());
   }
 
   override update(): void {
     this.hud.update(this.link.state());
-    this.tutorial.update();
+    this.intro.update();
+    if (!this.intro.open && !this.closeHelp) this.tutorial.update();
+    this.chatBox?.update();
+  }
+
+  /** While typing a chat line or reading How to Play the battlefield ignores its hotkeys. */
+  get keysCaptured(): boolean {
+    return !!this.closeHelp || (this.chatBox?.capturing ?? false);
+  }
+
+  /** Rules overview over the battlefield (from the options window or the intro card). */
+  openHelp(): void {
+    if (this.closeHelp) return;
+    if (this.closeOptions) this.toggleOptions();
+    const close = howToPlay(this, () => {
+      close();
+      // A frame later, so the closing Esc doesn't also reach the battlefield.
+      this.time.delayedCall(0, () => (this.closeHelp = null));
+    });
+    this.closeHelp = close;
   }
 
   setFieldLabel(text: string, color: number): void {
@@ -140,7 +178,7 @@ export class UiScene extends Phaser.Scene {
       this.closeOptions = null;
       return;
     }
-    this.closeOptions = optionsWindow(this, VIEW_W / 2, FIELD_TOP + FIELD_H / 2, () => this.toggleOptions());
+    this.closeOptions = optionsWindow(this, VIEW_W / 2, FIELD_TOP + FIELD_H / 2, () => this.toggleOptions(), () => this.openHelp());
   }
 
   floatText(text: string, color: number, x = VIEW_W / 2, y = FIELD_TOP + 40): void {

@@ -9,14 +9,19 @@ import {
   MODE_IDS,
   PROPHET,
   botCommands,
+  chatText,
   encodeEvents,
   modeLocksBuilder,
+  playerName,
   rollBuilders,
   rollableBuilders,
   roomTitle,
+  type ChatLine,
+  type ChatScope,
   type EventBatch,
   type GameData,
   type JoinOptions,
+  type LobbyMessages,
   type ModeId,
   type PlayerCommand,
   type RoomMeta,
@@ -32,6 +37,9 @@ const EVENT_EVERY = 2;
 const MAX_ROOMS = Number(process.env.MAX_ROOMS ?? 40);
 /** Connections per address across all rooms, so one script cannot open rooms without end. */
 const MAX_PER_IP = Number(process.env.MAX_PER_IP ?? 6);
+/** Chat flood guard: at most this many lines per sender within CHAT_WINDOW_MS. */
+const CHAT_BURST = 5;
+const CHAT_WINDOW_MS = 5000;
 
 let openRooms = 0;
 const connections = new Map<string, number>();
@@ -57,6 +65,8 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
   private requestedTitle = '';
   private pending: EventBatch = [];
   private ticks = 0;
+  /** Recent chat send times per session, for the flood guard. */
+  private chatTimes = new Map<string, number[]>();
 
   override onCreate(options: JoinOptions): void {
     if (openRooms >= MAX_ROOMS) throw new ServerError(503, 'server full - try again in a few minutes');
@@ -94,6 +104,15 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
       const p = this.slotOf(client);
       if (p && this.inLobby() && (team === 0 || team === 1) && this.teamSize(team) < MAX_TEAM_SIZE) p.team = team;
     });
+    this.onMessage('setName', (client, raw: string) => {
+      const p = this.slotOf(client);
+      const name = playerName(raw);
+      if (!p || !this.inLobby() || !name) return;
+      // A default game name follows the host's new name; a chosen one stays.
+      if (client.sessionId === this.state.host && !this.requestedTitle.trim()) this.state.title = roomTitle('', name);
+      p.name = name;
+      this.updateListing();
+    });
     this.onMessage('setReady', (client, ready: boolean) => {
       const p = this.slotOf(client);
       if (p && this.inLobby()) p.ready = !!ready;
@@ -128,6 +147,21 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
       const result = this.game.apply({ ...cmd, player } as Parameters<Game['apply']>[0]);
       if (!result.ok) client.send('err', result.error);
     });
+    this.onMessage('chat', (client, msg: LobbyMessages['chat']) => {
+      const p = this.slotOf(client);
+      const text = chatText(msg?.text);
+      if (!p || !text) return;
+      const now = Date.now();
+      const times = (this.chatTimes.get(client.sessionId) ?? []).filter((t) => now - t < CHAT_WINDOW_MS);
+      if (times.length >= CHAT_BURST) return client.send('err', 'chat: slow down');
+      times.push(now);
+      this.chatTimes.set(client.sessionId, times);
+      // Lobby chat always goes to everyone; content is never logged.
+      const scope: ChatScope = msg.scope === 'team' && !this.inLobby() ? 'team' : 'all';
+      const line: ChatLine = { from: this.state.players.indexOf(p), name: p.name, team: p.team as TeamId, scope, text };
+      if (scope === 'all') this.broadcast('chat', line);
+      else for (const c of this.clients) if (this.slotOf(c)?.team === p.team) c.send('chat', line);
+    });
   }
 
   override onAuth(client: Client, _options: JoinOptions, context: AuthContext): boolean {
@@ -142,7 +176,7 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
   override onJoin(client: Client, options: JoinOptions): void {
     const p = new NetPlayer();
     p.sessionId = client.sessionId;
-    p.name = (options.name ?? '').toUpperCase().slice(0, 10) || `PLAYER ${this.state.players.length + 1}`;
+    p.name = playerName(options.name) || `PLAYER ${this.state.players.length + 1}`;
     p.team = this.teamSize(0) <= this.teamSize(1) ? 0 : 1;
     p.builder = Object.keys(this.data.builders)[0]!;
     p.bot = false;
@@ -160,6 +194,7 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
 
   override async onLeave(client: Client): Promise<void> {
     this.release(client.sessionId);
+    this.chatTimes.delete(client.sessionId);
     const index = this.state.players.findIndex((p) => p.sessionId === client.sessionId);
     const p = this.state.players[index];
     if (!p) return;

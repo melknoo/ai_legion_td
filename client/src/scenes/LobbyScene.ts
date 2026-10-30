@@ -6,7 +6,10 @@ import {
   MODES,
   MODE_IDS,
   ROOM_NAME,
+  NAME_CHARS,
+  NAME_MAX,
   modeLocksBuilder,
+  playerName,
   type JoinOptions,
   type LobbyMessages,
   type ModeId,
@@ -15,13 +18,18 @@ import {
 import { builderPortrait } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import { serverUrl } from '../net/server.ts';
+import { ChatLog } from '../net/ChatLog.ts';
 import { NetSession } from '../session/NetSession.ts';
+import { ChatBox } from '../ui/ChatBox.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
+import { TEAM_NAMES, teamColor } from '../ui/playerColors.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextButton } from '../ui/TextButton.ts';
+import { TextInput } from '../ui/TextInput.ts';
 import { onKey } from '../ui/keys.ts';
+import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
-import { addSky } from './TitleScene.ts';
+import { addSky, readName, storeName } from './TitleScene.ts';
 
 interface SlotLike {
   sessionId: string;
@@ -53,7 +61,6 @@ export interface LobbyEntry {
   title?: string;
 }
 
-const TEAM_NAMES = ['WEST', 'EAST'];
 const BUILDERS = Object.keys(LEGION_DATA.builders);
 
 /** Online lobby: team and builder per player, game mode and bots chosen by the host. */
@@ -71,8 +78,12 @@ export class LobbyScene extends Phaser.Scene {
   private portrait!: Phaser.GameObjects.Image;
   private builderName!: Phaser.GameObjects.BitmapText;
   private builderNote!: Phaser.GameObjects.BitmapText;
-  private buttons!: Record<'copy' | 'visibility' | 'modePrev' | 'modeNext' | 'builderPrev' | 'builderNext' | 'team' | 'ready' | 'leave' | 'botW' | 'botE' | 'start', TextButton>;
+  private buttons!: Record<'copy' | 'visibility' | 'modePrev' | 'modeNext' | 'builderPrev' | 'builderNext' | 'team' | 'ready' | 'leave' | 'name' | 'botW' | 'botE' | 'start', TextButton>;
   private unbindErr: (() => void) | null = null;
+  private chat: ChatLog | null = null;
+  private chatBox: ChatBox | null = null;
+  /** Open while the player types a new name (over the status line). */
+  private nameInput: TextInput | null = null;
 
   constructor() {
     super('lobby');
@@ -83,7 +94,7 @@ export class LobbyScene extends Phaser.Scene {
     const params = new URLSearchParams(location.search);
     this.entry = entry?.create || entry?.join
       ? entry
-      : { join: params.get('room') ?? undefined, create: !params.get('room'), name: params.get('name') ?? undefined, private: true };
+      : { join: params.get('room') ?? undefined, create: !params.get('room'), name: params.get('name') ?? readName(), private: true };
     this.room = null;
     this.teamText = [];
     this.botRemove = [];
@@ -92,6 +103,9 @@ export class LobbyScene extends Phaser.Scene {
   create(): void {
     layoutCamera(this);
     addSky(this);
+    this.chat = null;
+    this.chatBox = null;
+    this.nameInput = null;
     ff6Window(this, 8, 8, VIEW_W - 16, VIEW_H - 16);
     this.titleText = this.add.bitmapText(VIEW_W / 2, 15, FONT, 'ONLINE LOBBY').setOrigin(0.5, 0).setTint(0xfff080);
     this.codeText = this.add.bitmapText(20, 31, FONT, '');
@@ -101,7 +115,7 @@ export class LobbyScene extends Phaser.Scene {
 
     TEAM_NAMES.forEach((name, t) => {
       const x = 20 + t * 224;
-      this.add.bitmapText(x, 74, FONT, `TEAM ${name}`).setTint(t === 0 ? 0x80b0ff : 0xff8080);
+      this.add.bitmapText(x, 74, FONT, `TEAM ${name}`).setTint(teamColor(t as TeamId));
       this.teamText[t] = this.add.bitmapText(x, 87, FONT, '').setLineSpacing(4);
     });
     // Host-only "x" buttons next to bot rows.
@@ -114,8 +128,9 @@ export class LobbyScene extends Phaser.Scene {
     this.add.bitmapText(20, 156, FONT, 'YOUR BUILDER').setTint(0xc0c8f0);
     this.portrait = this.add.image(20, 168, '__DEFAULT').setOrigin(0, 0);
     this.builderName = this.add.bitmapText(64, 172, FONT, '');
-    this.builderNote = this.add.bitmapText(64, 200, FONT, '').setTint(0xc0c8f0);
-    this.errorText = this.add.bitmapText(VIEW_W / 2, 212, FONT, '').setOrigin(0.5, 0).setTint(0xff7070);
+    this.builderNote = this.add.bitmapText(20, 212, FONT, '').setTint(0xc0c8f0);
+    // Errors take the status line's place for a moment; the chat fills the right of the builder panel.
+    this.errorText = this.add.bitmapText(20, 140, FONT, '').setTint(0xff7070);
 
     const y = 228;
     this.buttons = {
@@ -128,11 +143,16 @@ export class LobbyScene extends Phaser.Scene {
       team: new TextButton(this, 20, y, 48, 'TEAM', () => this.switchTeam()),
       ready: new TextButton(this, 72, y, 56, 'READY', () => this.toggleReady()),
       leave: new TextButton(this, 132, y, 56, 'LEAVE', () => this.leave()),
+      name: new TextButton(this, 192, y, 56, 'NAME', () => this.editName()),
       botW: new TextButton(this, 252, y, 64, '+BOT W', () => this.send('addBot', 0)),
       botE: new TextButton(this, 320, y, 64, '+BOT E', () => this.send('addBot', 1)),
       start: new TextButton(this, 388, y, 64, 'START', () => this.send('start', null)),
     };
-    onKey(this.input.keyboard!, 'keydown-ESC', () => this.leave());
+    // Esc first closes the name field or the chat input, then leaves.
+    onKey(this.input.keyboard!, 'keydown-ESC', () => {
+      if (this.nameInput) this.closeName();
+      else if (!this.chatBox?.capturing) this.leave();
+    });
 
     void this.connect();
   }
@@ -175,15 +195,16 @@ export class LobbyScene extends Phaser.Scene {
     this.portrait.setVisible(!random);
     if (me && !random) this.portrait.setTexture(facesetKey(builderPortrait(LEGION_DATA.builders[me.builder] ?? { id: '', fighters: [] })));
     this.builderName.setText(random ? 'RANDOM' : (LEGION_DATA.builders[me?.builder ?? '']?.name ?? '').toUpperCase());
-    const offer = [...(me?.offer ?? [])].map((b) => LEGION_DATA.builders[b]?.name.toUpperCase());
-    const note = random ? 'ROLLED WHEN THE GAME STARTS' : mode === 'apr' ? 'EVERYONE IS A PROPHET' : mode === 'sd' ? `DRAFT: ${offer.join(' / ')}` : 'ANY BUILDER';
+    const note = random ? 'ROLLED WHEN THE GAME STARTS' : mode === 'apr' ? 'EVERYONE IS A PROPHET' : mode === 'sd' ? 'DRAFT: PICK ONE OF TWO' : 'ANY BUILDER';
     this.builderNote.setText(note);
     this.buttons.builderPrev.setVisible(!modeLocksBuilder(mode));
     this.buttons.builderNext.setVisible(!modeLocksBuilder(mode));
 
     this.buttons.ready.setActive(!!me?.ready).setVisible(!host);
     for (const key of ['botW', 'botE', 'start'] as const) this.buttons[key].setVisible(host);
-    this.status.setText(host ? 'YOU HOST: PICK A MODE, ADD BOTS, START' : 'WAITING FOR THE HOST TO START');
+    const status = this.nameInput ? 'NAME:' : host ? 'YOU HOST: PICK A MODE, ADD BOTS, START' : 'WAITING FOR THE HOST TO START';
+    this.status.setText(status).setVisible(!this.errorText.text);
+    this.chatBox?.update();
   }
 
   private async connect(): Promise<void> {
@@ -200,6 +221,14 @@ export class LobbyScene extends Phaser.Scene {
     }
     history.replaceState(null, '', `${location.pathname}?room=${this.room.roomId}`);
     this.unbindErr = this.room.onMessage('err', (msg: string) => this.showError(msg));
+    this.chat = new ChatLog(this.room);
+    // The heading doubles as the way to open the chat on touch screens.
+    this.add
+      .bitmapText(240, 156, FONT, TOUCH ? 'CHAT: TAP HERE' : 'CHAT: PRESS ENTER')
+      .setTint(0xc0c8f0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.chatBox?.toggle());
+    this.chatBox = new ChatBox(this, this.chat, { x: 240, bottom: 224, cols: 28, rows: 4, inGame: false, team: () => (this.mySlot()?.team ?? 0) as TeamId, blocked: () => !!this.nameInput });
   }
 
   private showError(msg: string): void {
@@ -231,6 +260,30 @@ export class LobbyScene extends Phaser.Scene {
     if (!pool.length) return;
     const current = pool.indexOf(me?.builder ?? pool[0]!);
     this.send('setBuilder', pool[(current + step + pool.length) % pool.length]!);
+  }
+
+  private editName(): void {
+    if (this.nameInput || !this.room) return;
+    if (this.chatBox?.isOpen) this.chatBox.close();
+    this.nameInput = new TextInput(this, 64, 136, 100, {
+      maxLength: NAME_MAX,
+      allowed: NAME_CHARS,
+      upperCase: true,
+      initial: this.mySlot()?.name ?? readName(),
+      onEnter: (value) => {
+        const name = playerName(value);
+        if (name) {
+          this.send('setName', name);
+          storeName(name);
+        }
+        this.closeName();
+      },
+    }).setActive(true);
+  }
+
+  private closeName(): void {
+    this.nameInput?.destroy();
+    this.nameInput = null;
   }
 
   private switchTeam(): void {
@@ -268,6 +321,6 @@ export class LobbyScene extends Phaser.Scene {
   private enterGame(room: Room): void {
     this.room = null;
     this.unbindErr?.();
-    this.scene.start('battle', { session: new NetSession(room, LEGION_DATA) });
+    this.scene.start('battle', { session: new NetSession(room, LEGION_DATA, this.chat ?? undefined) });
   }
 }

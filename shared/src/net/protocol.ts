@@ -30,6 +30,42 @@ export function roomTitle(raw: unknown, host: string): string {
   return (clean || `${host}'S GAME`).slice(0, ROOM_TITLE_MAX);
 }
 
+/** Longest player name; lobby rows and the HUD have a fixed column for it. */
+export const NAME_MAX = 10;
+/** Characters a player name may use. */
+export const NAME_CHARS = /[A-Z0-9 ]/;
+
+/** Uppercased, filtered and cut player name; empty if nothing usable is left. */
+export function playerName(raw: unknown): string {
+  return typeof raw === 'string' ? [...raw.toUpperCase()].filter((c) => NAME_CHARS.test(c)).join('').trim().slice(0, NAME_MAX).trim() : '';
+}
+
+/** Who sees a chat line: the sender's team or everyone (the lobby is always everyone). */
+export type ChatScope = 'team' | 'all';
+/** Longest chat line; the input field shows it in full. */
+export const CHAT_MAX = 50;
+
+/** Chat text cut to printable ASCII (all the bitmap font can draw), single spaces, at most CHAT_MAX. */
+export function chatText(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/[^\x20-\x7e]/g, ' ')
+    .replace(/ +/g, ' ')
+    .trim()
+    .slice(0, CHAT_MAX)
+    .trim();
+}
+
+/** A chat line as the server relays it in a `chat` message. */
+export interface ChatLine {
+  /** Sender's slot (game player index). */
+  from: number;
+  name: string;
+  team: TeamId;
+  scope: ChatScope;
+  text: string;
+}
+
 /** One open public lobby, as `GET /rooms` lists it. */
 export interface RoomListing {
   id: string;
@@ -81,6 +117,10 @@ export interface LobbyMessages {
   addBot: TeamId;
   removeBot: number;
   start: null;
+  /** Rename yourself before the game starts. */
+  setName: string;
+  /** Also sent during the game. */
+  chat: { scope: ChatScope; text: string };
 }
 
 /** Picks `count` distinct builders using `random` in [0, 1). */

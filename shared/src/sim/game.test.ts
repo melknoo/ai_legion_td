@@ -354,6 +354,25 @@ describe('wire protocol', () => {
     ];
     expect(decodeEvents(encodeEvents(events))).toEqual(events);
   });
+
+  it('cleans chat text', async () => {
+    const { CHAT_MAX, chatText } = await import('../net/protocol.ts');
+    expect(chatText('  gg  wp\n')).toBe('gg wp');
+    expect(chatText('Gr\u00fc\u00dfe\u0007!')).toBe('Gr e !');
+    expect(chatText('x'.repeat(200))).toHaveLength(CHAT_MAX);
+    expect(chatText('   ')).toBe('');
+    expect(chatText(42)).toBe('');
+    expect(chatText(undefined)).toBe('');
+  });
+
+  it('cleans player names', async () => {
+    const { NAME_MAX, playerName } = await import('../net/protocol.ts');
+    expect(playerName('  max  ')).toBe('MAX');
+    expect(playerName('Dr. <Evil>')).toBe('DR EVIL');
+    expect(playerName('a'.repeat(30))).toHaveLength(NAME_MAX);
+    expect(playerName('!!!')).toBe('');
+    expect(playerName(null)).toBe('');
+  });
 });
 
 describe('food and farms', () => {

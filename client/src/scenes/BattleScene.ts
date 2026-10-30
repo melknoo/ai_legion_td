@@ -14,7 +14,7 @@ import { SoloReport } from '../soloReport.ts';
 import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
-import { playerColor } from '../ui/playerColors.ts';
+import { ME_COLOR, seatColor, teamColor } from '../ui/playerColors.ts';
 import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
 
@@ -48,6 +48,10 @@ interface UnitView {
   /** Until then the unit holds its attack pose (characters) or bites fast (monsters). */
   attackUntil: number;
   facingRight: boolean;
+  /** Fighters look down (at the player) until they first move or strike in a wave. */
+  faceDown: boolean;
+  /** Set once the fighter moved or attacked this wave; cleared when the next build phase starts. */
+  fought: boolean;
   flashUntil: number;
   /** Base sprite scale from the manifest. */
   scale: number;
@@ -100,6 +104,9 @@ export class BattleScene extends Phaser.Scene {
   private laneBg!: Phaser.GameObjects.TileSprite;
   private arenaBg!: Phaser.GameObjects.TileSprite;
   private grid!: Phaser.GameObjects.Graphics;
+  /** "YOU" over the own grid while building, and the leak line's "TO KING" label (lanes only). */
+  private youMark!: Phaser.GameObjects.BitmapText;
+  private kingMark!: Phaser.GameObjects.BitmapText;
   private ghost!: Phaser.GameObjects.Sprite;
   /** Pulsing ring and bobbing arrow on the selected unit. */
   private selRing!: Phaser.GameObjects.Ellipse;
@@ -139,6 +146,10 @@ export class BattleScene extends Phaser.Scene {
     const side = Math.max(0, (VIEW_FIELD_W - ARENA_PX.w) / 2) + FIELD_MARGIN;
     this.arenaBg = this.add.tileSprite(-side, -FIELD_MARGIN, ARENA_PX.w + side * 2, ARENA_PX.h + FIELD_MARGIN * 2, 'stone').setOrigin(0, 0);
     this.grid = this.add.graphics().setDepth(1);
+    // Font pixels at 2/3 scale come out as 2 screen pixels, like the HUD. "YOU" sits in the headroom above the
+    // lane, "TO KING" halfway down the leak line, under the units.
+    this.youMark = this.add.bitmapText(0, -1, FONT, 'YOU').setOrigin(0.5, 1).setScale(2 / 3).setTint(ME_COLOR).setDepth(9001);
+    this.kingMark = this.add.bitmapText(LANE.leakX * SCALE - 2, LANE_PX.h / 2, FONT, 'TO KING').setOrigin(1, 0.5).setScale(2 / 3).setTint(0xff9090).setDepth(2);
     this.hpBars = this.add.graphics().setDepth(9999);
     // Above the units, under HP bars and hit effects.
     this.trails = new SwingTrails(this, 9990);
@@ -179,6 +190,7 @@ export class BattleScene extends Phaser.Scene {
         upgradeKing: (stat) => this.upgradeKing(stat),
         selectView: (i) => this.selectView(i),
       },
+      chat: this.session.chat,
       state: () => ({
         selectedBuild: this.selectedBuild,
         selectedUnit: this.selectedUnit,
@@ -233,7 +245,7 @@ export class BattleScene extends Phaser.Scene {
       cam.centerOn(ARENA_PX.w / 2, ARENA_PX.h / 2 - HEADROOM);
       return;
     }
-    const pan = (this.cursors.right.isDown ? 1 : 0) - (this.cursors.left.isDown ? 1 : 0);
+    const pan = this.ui.keysCaptured ? 0 : (this.cursors.right.isDown ? 1 : 0) - (this.cursors.left.isDown ? 1 : 0);
     if (pan) {
       this.camX += pan * PAN_SPEED * dt;
       this.manualCamUntil = this.time.now + 3000;
@@ -270,40 +282,42 @@ export class BattleScene extends Phaser.Scene {
 
   private setupInput(): void {
     const kb = this.input.keyboard!;
+    // Hotkeys stay quiet while a chat line is typed.
+    const key = (event: string, fn: (e: KeyboardEvent) => void) => onKey(kb, event, (e) => !this.ui.keysCaptured && fn(e));
     this.cursors = kb.createCursorKeys();
     // Command card: QWER / ASDF / YXCV as labelled on a German keyboard; Z also works for QWERTY.
     const slot = (i: number) => () => this.session.game.phase !== 'over' && this.slotKey(i);
-    SLOT_KEYS.forEach((key, i) => onKey(kb, `keydown-${key}`, slot(i)));
-    onKey(kb, 'keydown-Z', slot(SLOT_KEYS.indexOf('Y')));
-    onKey(kb, 'keydown-N', () => this.nextSendPage());
-    onKey(kb, 'keydown-ONE', () => this.setSlotMode('build'));
+    SLOT_KEYS.forEach((k, i) => key(`keydown-${k}`, slot(i)));
+    key('keydown-Z', slot(SLOT_KEYS.indexOf('Y')));
+    key('keydown-N', () => this.nextSendPage());
+    key('keydown-ONE', () => this.setSlotMode('build'));
     // A second press on 2 turns the send page.
-    onKey(kb, 'keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
-    onKey(kb, 'keydown-T', () => this.ui.toggleTypeChart());
-    onKey(kb, 'keydown-O', () => this.ui.toggleOptions());
-    onKey(kb, 'keydown-I', () => this.ui.toggleWavePreview());
-    onKey(kb, 'keydown-TAB', (e: KeyboardEvent) => {
+    key('keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
+    key('keydown-T', () => this.ui.toggleTypeChart());
+    key('keydown-O', () => this.ui.toggleOptions());
+    key('keydown-I', () => this.ui.toggleWavePreview());
+    key('keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
       const all = this.viewList.flatMap((v) => v.areas);
       const i = all.indexOf(this.viewArea);
       this.setView(all[(i + (e.shiftKey ? all.length - 1 : 1)) % all.length]!);
     });
     // Space jumps home: own lane first, a second press to the own king.
-    onKey(kb, 'keydown-SPACE', (e: KeyboardEvent) => {
+    key('keydown-SPACE', (e: KeyboardEvent) => {
       e.preventDefault();
       const game = this.session.game;
       this.setView(this.viewArea === this.me ? game.arenaOf(game.players[this.me]!.team) : this.me);
     });
-    onKey(kb, 'keydown-ESC', () => (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
-    onKey(kb, 'keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
-    onKey(kb, 'keydown-U', () => this.upgradeSelected());
-    onKey(kb, 'keydown-DELETE', () => this.sellSelected());
-    onKey(kb, 'keydown-BACKSPACE', () => this.sellSelected());
-    onKey(kb, 'keydown-B', () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'));
-    onKey(kb, 'keydown-H', () => this.upgradeKing('hp'));
-    onKey(kb, 'keydown-J', () => this.upgradeKing('attack'));
-    onKey(kb, 'keydown-K', () => this.upgradeKing('regen'));
-    onKey(kb, 'keydown-G', () => this.upgradeFarm());
+    key('keydown-ESC', () => (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
+    key('keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
+    key('keydown-U', () => this.upgradeSelected());
+    key('keydown-DELETE', () => this.sellSelected());
+    key('keydown-BACKSPACE', () => this.sellSelected());
+    key('keydown-B', () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'));
+    key('keydown-H', () => this.upgradeKing('hp'));
+    key('keydown-J', () => this.upgradeKing('attack'));
+    key('keydown-K', () => this.upgradeKing('regen'));
+    key('keydown-G', () => this.upgradeFarm());
 
     this.input.mouse?.disableContextMenu();
     this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
@@ -510,13 +524,17 @@ export class BattleScene extends Phaser.Scene {
     const owner = lane ? game.players[area] : undefined;
     const ally = owner && owner.team === game.players[this.me]!.team;
     const label = owner
-      ? `${owner.index === this.me ? 'MY' : ally ? 'ALLY' : 'FOE'} LANE - ${owner.name.toUpperCase()} (${game.data.builders[owner.builder]?.name.toUpperCase()})`
+      ? `${owner.index === this.me ? 'YOUR' : ally ? 'ALLY' : 'FOE'} LANE - ${owner.name.toUpperCase()} (${game.data.builders[owner.builder]?.name.toUpperCase()})`
       : area === game.battleArena()
         ? 'ARENA BATTLE'
         : (view?.label.replace('\n', ' ') ?? '');
-    const mine = owner ? ally : view?.label.startsWith('MY');
+    // Own lane in gold, others in their team colour (kings and arena by the side they belong to).
+    const myTeam = game.players[this.me]!.team;
+    const color = owner
+      ? seatColor(game, owner.index, this.me)
+      : teamColor(view?.label.startsWith('MY') ? myTeam : view?.label.startsWith('FOE') ? (myTeam === 0 ? 1 : 0) : myTeam);
     // The UI scene starts after this one; it picks the label up on its first frames.
-    this.time.delayedCall(0, () => this.ui.setFieldLabel(label, mine ? 0x80b0ff : 0xff8080));
+    this.time.delayedCall(0, () => this.ui.setFieldLabel(label, color));
   }
 
   /** A tab click: switch to that view, or step through its lanes if already there. */
@@ -569,9 +587,13 @@ export class BattleScene extends Phaser.Scene {
       const dx = Math.abs(s.x - view.lastX) > TELEPORT_PX ? 0 : s.x - view.lastX;
       if (Math.abs(dx) > 0.05) view.facingRight = dx > 0;
       view.speed += (Math.abs(dx) - view.speed) * 0.3;
-      // Idle fighters turn back towards the incoming creeps (in the arena the west army faces east).
-      if (u.kind === 'fighter' && game.phase !== 'arena' && view.speed < 0.05 && this.time.now >= view.attackUntil) view.facingRight = false;
       const moving = view.speed > 0.1;
+      if (moving && game.phase === 'fight') view.fought = true;
+      // Idle fighters turn back towards the incoming creeps (in the arena the west army faces east);
+      // until they have fought this wave they look down at the player instead.
+      const idle = u.kind === 'fighter' && game.phase !== 'arena' && view.speed < 0.05 && this.time.now >= view.attackUntil;
+      if (idle) view.facingRight = false;
+      view.faceDown = idle && !view.fought;
       view.lastX = s.x;
       const { lunge, squash, hop } = view.recoil;
       view.sprite
@@ -616,9 +638,9 @@ export class BattleScene extends Phaser.Scene {
     const sprite = this.add.sprite(0, 0, key).setOrigin(0.5, king ? 0.9 : 1).setScale(scale);
     if (king) sprite.play(`${KING_SPRITES[u.team]}-idle`);
     const shadow = this.add.image(0, 0, ellipseTexture(this, king ? 28 : 12 * scale, king ? 8 : 4 * scale, 0.35)).setTint(0x000000);
-    // Fighters and sends wear their owner's colour at the feet.
+    // Fighters and sends wear their owner's colour at the feet: gold for your own, else the team colour.
     const owned = u.kind === 'fighter' || u.kind === 'merc';
-    const color = playerColor(u.owner);
+    const color = seatColor(this.session.game, u.owner, this.me);
     const ownerRing = owned ? this.add.image(0, 0, ellipseTexture(this, 14 * scale, 5 * scale, 0.3, 0.9)).setTint(color) : undefined;
     // Aura carriers get a pulsing ring at their feet in the colour of what the aura does.
     const aura = this.session.game.def(u).abilities?.find((a) => a.kind === 'aura');
@@ -631,7 +653,7 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, alpha: 0.12, scaleX: 1.25, scaleY: 1.25, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: this.toField(u.x, u.y).x, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
+    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: this.toField(u.x, u.y).x, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', faceDown: u.kind === 'fighter', fought: false, flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
   }
@@ -654,12 +676,13 @@ export class BattleScene extends Phaser.Scene {
     const spec = UNIT_SPRITES[u.def];
     if (!spec) return;
     const sprite = view.sprite;
-    // Character sheets face left, monster sheets face right.
-    sprite.setFlipX(spec.kind === 'character' ? view.facingRight : !view.facingRight);
+    // Character sheets face left, monster sheets face right; the down column is never flipped.
+    sprite.setFlipX(!view.faceDown && (spec.kind === 'character' ? view.facingRight : !view.facingRight));
     const attacking = this.time.now < view.attackUntil;
     if (spec.kind === 'monster') {
       sprite.setAlpha(u.dead ? 0.4 : 1);
-      if (sprite.anims.currentAnim?.key !== `${spriteKey(spec)}-walk`) sprite.play(`${spriteKey(spec)}-walk`);
+      const walk = `${spriteKey(spec)}-walk${view.faceDown ? '-down' : ''}`;
+      if (sprite.anims.currentAnim?.key !== walk) sprite.play(walk);
       // No attack frames: the walk cycle runs fast while biting.
       sprite.anims.timeScale = attacking ? 3 : 1;
       return;
@@ -672,9 +695,10 @@ export class BattleScene extends Phaser.Scene {
       if (sprite.anims.currentAnim?.key !== `${spriteKey(spec)}-walk`) sprite.play(`${spriteKey(spec)}-walk`);
     } else {
       const pose = `${spriteKey(spec)}-${attacking ? 'Attack' : 'Idle'}`;
-      if (sprite.texture.key !== pose) {
+      const frame = view.faceDown && !attacking ? DIR.down : DIR.left;
+      if (sprite.texture.key !== pose || String(sprite.frame.name) !== String(frame)) {
         sprite.anims.stop();
-        sprite.setAlpha(1).setTexture(pose, DIR.left);
+        sprite.setAlpha(1).setTexture(pose, frame);
       }
     }
   }
@@ -710,6 +734,8 @@ export class BattleScene extends Phaser.Scene {
         if (!view) return;
         const dir = to.x >= from.x ? 1 : -1;
         view.facingRight = dir > 0;
+        view.fought = true;
+        view.faceDown = false;
         if (a.kind === 'king') {
           view.sprite.play(`${KING_SPRITES[a.team]}-attack`).chain(`${KING_SPRITES[a.team]}-idle`);
           this.playFx('explosion', to.x, to.y - 6);
@@ -789,7 +815,10 @@ export class BattleScene extends Phaser.Scene {
         return;
       case 'phase': {
         // Each build phase starts on the fighters, each wave on the sends.
-        if (ev.phase === 'build') this.slotMode = 'build';
+        if (ev.phase === 'build') {
+          this.slotMode = 'build';
+          for (const view of this.views.values()) view.fought = false;
+        }
         if (ev.phase === 'fight') {
           this.slotMode = 'send';
           this.selectedBuild = null;
@@ -809,12 +838,12 @@ export class BattleScene extends Phaser.Scene {
           const wave = game.data.waves[ev.wave - 1]!;
           this.ui.showBanner([`WAVE ${ev.wave}`, `${wave.count}X ${game.data.units[wave.creep]!.name.toUpperCase()}`]);
         } else {
-          // Wave summary in a corner: how every lane held, names in their player colour.
+          // Wave summary in a corner: how every lane held, you in gold, the rest in their team colour.
           const width = Math.max(...game.players.map((p) => (p.index === this.me ? 3 : p.name.length)));
           const rows = game.players.map((p, i) => {
             const leaks = p.leaks - (this.leaksAtWaveStart[i] ?? 0);
             const name = (p.index === this.me ? 'YOU' : p.name.toUpperCase()).padEnd(width + 1);
-            return { text: `${name}${leaks ? `${leaks} LEAKS` : 'CLEAN'}`, color: playerColor(p.index) };
+            return { text: `${name}${leaks ? `${leaks} LEAKS` : 'CLEAN'}`, color: seatColor(game, p.index, this.me) };
           });
           this.ui.showSummary([{ text: `WAVE ${ev.wave - 1} CLEARED`, color: 0xfff080 }, ...rows]);
         }
@@ -946,11 +975,19 @@ export class BattleScene extends Phaser.Scene {
     g.clear();
     this.ghost.setVisible(false);
     const game = this.session.game;
-    if (!game.isLane(this.viewArea)) return;
+    const lane = game.isLane(this.viewArea);
     const own = this.viewArea === this.me;
     const build = game.phase === 'build';
     const x0 = LANE.gridX * SCALE;
     const cs = CELL * SCALE;
+    this.kingMark.setVisible(lane);
+    this.youMark.setVisible(lane && own && build);
+    if (!lane) return;
+    // While building, the own grid is framed in the player's gold with a bobbing "YOU" above it.
+    if (own && build) {
+      this.youMark.setPosition(x0 + (LANE.gridCols * cs) / 2, Math.round(-1 + Math.sin(this.time.now / 200)));
+      g.lineStyle(1, ME_COLOR, 0.7).strokeRect(x0, 0, LANE.gridCols * cs, LANE.gridRows * cs);
+    }
     g.lineStyle(1, 0xffffff, own && build ? 0.22 : 0.08);
     for (let c = 0; c <= LANE.gridCols; c++) g.lineBetween(x0 + c * cs, 0, x0 + c * cs, LANE.gridRows * cs);
     for (let r = 0; r <= LANE.gridRows; r++) g.lineBetween(x0, r * cs, x0 + LANE.gridCols * cs, r * cs);
@@ -972,7 +1009,7 @@ export class BattleScene extends Phaser.Scene {
     if (spec) {
       const key = spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`;
       this.ghost
-        .setTexture(key, DIR.left) // both sheet kinds have a left-facing column
+        .setTexture(key, DIR.down) // both sheet kinds have a down-facing column
         .setPosition(x0 + col * cs + cs / 2, (row + 1) * cs)
         .setTint(blocked ? 0xff6060 : 0xffffff)
         .setVisible(true);

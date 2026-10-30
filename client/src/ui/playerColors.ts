@@ -1,6 +1,16 @@
-/** One colour per seat, WC3-style: red, blue, teal, purple, yellow, orange, green, pink. */
-export const PLAYER_COLORS = [0xff3030, 0x3070ff, 0x30e0c0, 0xa040ff, 0xffe030, 0xff9020, 0x40d040, 0xff70c0] as const;
+import type { TeamId } from '@legion/shared';
 
-export function playerColor(index: number): number {
-  return PLAYER_COLORS[index % PLAYER_COLORS.length]!;
+/** Team names and colours as in the lobby: WEST is blue, EAST is red. */
+export const TEAM_NAMES = ['WEST', 'EAST'] as const;
+const TEAM_COLORS = [0x80b0ff, 0xff8080] as const;
+/** The local player stands out in gold everywhere: rings, labels, summaries, chat. */
+export const ME_COLOR = 0xffd040;
+
+export function teamColor(team: TeamId): number {
+  return TEAM_COLORS[team];
+}
+
+/** Colour for a seat as seen by the local player: gold for yourself, else the seat's team colour. */
+export function seatColor(game: { players: readonly { team: TeamId }[] }, seat: number, me: number): number {
+  return seat === me ? ME_COLOR : teamColor(game.players[seat]?.team ?? 0);
 }

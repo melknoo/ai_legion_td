@@ -1,4 +1,5 @@
 import type { CommandResult, GameEvent, GameView, PlayerCommand } from '@legion/shared';
+import type { ChatLog } from '../net/ChatLog.ts';
 
 /** What the battlefield needs from a game, whether simulated locally or mirrored from the server. */
 export interface Session {
@@ -12,4 +13,6 @@ export interface Session {
   /** Local sessions answer immediately; online sessions report rejections later via onError. */
   send(cmd: PlayerCommand): CommandResult;
   onError?: (message: string) => void;
+  /** Online only: the room's chat, carried over from the lobby. */
+  readonly chat?: ChatLog;
 }

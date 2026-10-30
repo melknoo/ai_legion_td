@@ -118,6 +118,8 @@ export class BootScene extends Phaser.Scene {
       // Characters walk facing left, monsters facing right; the scene flips as needed.
       const dir = spec.kind === 'character' ? DIR.left : DIR.right;
       this.anims.create({ key, frames: this.anims.generateFrameNumbers(`${spriteKey(spec)}-Walk`, { frames: column(dir) }), frameRate: 8, repeat: -1 });
+      // Monster fighters always loop their walk; before they fight they look down.
+      if (spec.kind === 'monster') this.anims.create({ key: `${key}-down`, frames: this.anims.generateFrameNumbers(`${spriteKey(spec)}-Walk`, { frames: column(DIR.down) }), frameRate: 8, repeat: -1 });
     }
     for (const folder of KING_SPRITES) {
       this.anims.create({ key: `${folder}-idle`, frames: this.anims.generateFrameNumbers(`${folder}-Idle`), frameRate: 8, repeat: -1 });

@@ -15,6 +15,7 @@ import {
   type UnitDef,
   type UnitState,
 } from '@legion/shared';
+import type { ChatLog } from '../net/ChatLog.ts';
 import type { Session } from './Session.ts';
 
 /** Loose shape of the synced schema state (see server/src/schema.ts). */
@@ -227,6 +228,7 @@ export class NetSession implements Session {
   constructor(
     readonly room: Room,
     data: GameData,
+    readonly chat?: ChatLog,
   ) {
     this.game = new NetGameView(data);
     this.shown = snapshot(room.state as NetStateLike);

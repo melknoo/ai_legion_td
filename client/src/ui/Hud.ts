@@ -7,6 +7,7 @@ import { RichLine, richText, type Segment } from './RichLine.ts';
 import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
 import { SLOT_KEYS } from './keys.ts';
+import { teamColor } from './playerColors.ts';
 import { TOUCH, bindPress } from './touch.ts';
 
 /** What the command card offers: fighters for gold or sends for lumber. */
@@ -153,8 +154,8 @@ export class Hud {
     this.topText = scene.add.bitmapText(8, 4, FONT, '').setLineSpacing(2);
     this.tabs = views.map((v, i) => new TabButton(scene, 84 + i * 41, 2, 39, 21, v.label, () => act.selectView(i)));
     const myTeam = game.players[player]!.team;
-    scene.add.bitmapText(252, 4, FONT, 'MY').setTint(myTeam === 0 ? 0x80b0ff : 0xff8080);
-    scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(myTeam === 0 ? 0xff8080 : 0x80b0ff);
+    scene.add.bitmapText(252, 4, FONT, 'MY').setTint(teamColor(myTeam));
+    scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(teamColor(myTeam === 0 ? 1 : 0));
     this.kingBars = scene.add.graphics();
     this.alive = [0, 1].map((row) => scene.add.bitmapText(474, 4 + row * 10, FONT, '').setOrigin(1, 0));
     // Next wave: hover shows it in the info panel, a click (or I) pins it there.
