@@ -1,6 +1,10 @@
 # Legion Pixel
 
-Standalone browser remake of the Warcraft III map *Legion TD Mega* in a SNES/FF6 pixel style.
+Multiplayer browser tower defense in a SNES/FF6 pixel style: build fighters on your lane, send mercenaries to the enemy, defend your king. Solo against bots or online, 1v1 up to 4v4.
+
+Inspired by the Warcraft III custom map *Legion TD Mega*. A fan project, not affiliated with Blizzard Entertainment or AutoAttack Games; builders, fighters and art are our own (art from a CC0 pack, see Credits).
+
+Play: https://legion.schleiweb.de
 
 - `shared/` – deterministic game simulation, content (`src/data/legion.ts`) and the wire protocol
 - `server/` – Colyseus 0.18 game server: lobby + authoritative simulation, bots fill empty seats

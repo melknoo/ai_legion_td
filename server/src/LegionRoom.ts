@@ -1,4 +1,4 @@
-import { Room, type Client } from 'colyseus';
+import { Room, ServerError, type AuthContext, type Client, type RoomException } from 'colyseus';
 import {
   Game,
   LEGION_DATA,
@@ -20,12 +20,19 @@ import {
   type PlayerCommand,
   type TeamId,
 } from '@legion/shared';
-import { monitor } from './monitor.ts';
+import { log, monitor } from './monitor.ts';
 import { NetPlayer, NetState, NetUnit } from './schema.ts';
 
 const COMMANDS = new Set(['build', 'upgrade', 'sell', 'sendMerc', 'buyWorker', 'upgradeKing', 'upgradeFarm', 'reroll']);
 /** Ticks between event broadcasts; matches the 100 ms patch rate. */
 const EVENT_EVERY = 2;
+/** Open rooms on this one instance; each running match costs a 20 Hz sim with bots. */
+const MAX_ROOMS = Number(process.env.MAX_ROOMS ?? 40);
+/** Connections per address across all rooms, so one script cannot open rooms without end. */
+const MAX_PER_IP = Number(process.env.MAX_PER_IP ?? 6);
+
+let openRooms = 0;
+const connections = new Map<string, number>();
 
 /**
  * One match: a lobby where players pick team and builder, then the authoritative
@@ -35,15 +42,23 @@ const EVENT_EVERY = 2;
 export class LegionRoom extends Room<{ state: NetState }> {
   override maxClients = MAX_TEAM_SIZE * 2;
   override patchRate = 100;
+  override maxMessagesPerSecond = 30;
   override state = new NetState();
 
   private game: Game | null = null;
   private data: GameData = LEGION_DATA;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: { clear(): void } | null = null;
+  /** Address of each connected session, for the per-address cap. */
+  private ips = new Map<string, string>();
+  /** Counted in `openRooms`; a room turned away in onCreate still gets disposed. */
+  private counted = false;
   private pending: GameEvent[] = [];
   private ticks = 0;
 
   override onCreate(options: JoinOptions): void {
+    if (openRooms >= MAX_ROOMS) throw new ServerError(503, 'server full - try again in a few minutes');
+    openRooms++;
+    this.counted = true;
     this.state.status = 'lobby';
     this.state.mode = 'ap';
     this.state.winner = -1;
@@ -54,7 +69,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
 
     this.onMessage('setBuilder', (client, builder: string) => {
       const p = this.slotOf(client);
-      if (!p || !this.inLobby() || !this.data.builders[builder] || modeLocksBuilder(this.state.mode)) return;
+      if (!p || !this.inLobby() || typeof builder !== 'string' || !Object.hasOwn(this.data.builders, builder) || modeLocksBuilder(this.state.mode)) return;
       if (this.state.mode === 'sd' && !p.offer.includes(builder)) return;
       p.builder = builder;
     });
@@ -92,12 +107,21 @@ export class LegionRoom extends Room<{ state: NetState }> {
       if (this.isHost(client) && this.inLobby()) this.startGame(client);
     });
     this.onMessage('cmd', (client, cmd: PlayerCommand) => {
-      if (!this.game || !cmd || !COMMANDS.has(cmd.type)) return;
+      if (!this.game || !cmd || typeof cmd !== 'object' || !COMMANDS.has(cmd.type)) return;
       const player = this.state.players.findIndex((p) => p.sessionId === client.sessionId);
       if (player < 0) return;
       const result = this.game.apply({ ...cmd, player } as Parameters<Game['apply']>[0]);
       if (!result.ok) client.send('err', result.error);
     });
+  }
+
+  override onAuth(client: Client, _options: JoinOptions, context: AuthContext): boolean {
+    // Behind the Cloudflare tunnel the visitor's address comes in a header.
+    const ip = context.headers.get('cf-connecting-ip') ?? context.ip ?? '?';
+    if ((connections.get(ip) ?? 0) >= MAX_PER_IP) throw new ServerError(429, 'too many connections from your address');
+    connections.set(ip, (connections.get(ip) ?? 0) + 1);
+    this.ips.set(client.sessionId, ip);
+    return true;
   }
 
   override onJoin(client: Client, options: JoinOptions): void {
@@ -116,6 +140,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.release(client.sessionId);
     const index = this.state.players.findIndex((p) => p.sessionId === client.sessionId);
     const p = this.state.players[index];
     if (!p) return;
@@ -138,10 +163,33 @@ export class LegionRoom extends Room<{ state: NetState }> {
   }
 
   override onDispose(): void {
-    if (this.timer) clearInterval(this.timer);
+    this.timer?.clear();
+    if (this.counted) openRooms--;
+    for (const id of [...this.ips.keys()]) this.release(id);
     // Closed while the game still ran: everyone left.
     if (this.game && this.game.phase !== 'over') monitor.gameEnded(this.roomId, { wave: this.game.wave, winner: null, abandoned: true, builders: this.builders() });
     monitor.roomDisposed(this.roomId);
+  }
+
+  /** A handler or the game loop threw: log it and end this match instead of the whole server. */
+  override onUncaughtException(error: RoomException, method: string): void {
+    if (error.cause instanceof ServerError) return; // our own rejections (server full, too many connections)
+    log('room.error', { room: this.roomId, method, error: error.message, stack: error.stack });
+    if (method === 'setInterval' && this.game) {
+      this.timer?.clear();
+      this.timer = null;
+      this.broadcast('err', 'the match crashed, sorry');
+      void this.disconnect();
+    }
+  }
+
+  private release(sessionId: string): void {
+    const ip = this.ips.get(sessionId);
+    this.ips.delete(sessionId);
+    if (!ip) return;
+    const n = (connections.get(ip) ?? 1) - 1;
+    if (n > 0) connections.set(ip, n);
+    else connections.delete(ip);
   }
 
   private reportPlayers(): void {
@@ -182,7 +230,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     });
     void this.lock();
     this.syncState();
-    this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.timer = this.clock.setInterval(() => this.tick(), TICK_MS);
   }
 
   private tick(): void {
@@ -200,7 +248,7 @@ export class LegionRoom extends Room<{ state: NetState }> {
     }
     if (game.phase === 'over') {
       this.state.status = 'over';
-      if (this.timer) clearInterval(this.timer);
+      this.timer?.clear();
       this.timer = null;
       if (this.pending.length) this.broadcast('ev', encodeEvents(this.pending), { afterNextPatch: true });
       this.pending = [];

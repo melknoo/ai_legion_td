@@ -181,7 +181,9 @@ export class LobbyScene extends Phaser.Scene {
       this.room = this.entry.join ? await client.joinById(this.entry.join, options) : await client.create(ROOM_NAME, options);
     } catch (e) {
       console.error(e);
-      this.status.setText(this.entry.join ? 'ROOM NOT FOUND OR ALREADY STARTED' : 'CANNOT CONNECT - IS THE SERVER RUNNING?').setTint(0xff7070);
+      // The server's own reason when it turns us away (full, too many connections).
+      const reason = e instanceof Error && /full|too many/i.test(e.message) ? e.message.toUpperCase() : null;
+      this.status.setText(reason ?? (this.entry.join ? 'ROOM NOT FOUND OR ALREADY STARTED' : 'CANNOT CONNECT - IS THE SERVER RUNNING?')).setTint(0xff7070);
       return;
     }
     this.codeText.setText(`ROOM CODE: ${this.room.roomId}`);

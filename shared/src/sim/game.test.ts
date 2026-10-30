@@ -219,6 +219,22 @@ describe('sends', () => {
   });
 });
 
+describe('hostile commands', () => {
+  it('reject inherited property names and junk instead of breaking the game', () => {
+    const g = newGame();
+    const before = { ...g.players[0]! };
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expect(g.apply({ type: 'sendMerc', player: 0, merc: name })).toMatchObject({ ok: false });
+      expect(g.apply({ type: 'build', player: 0, unit: name, col: 0, row: 0 })).toMatchObject({ ok: false });
+      expect(g.apply({ type: 'upgradeKing', player: 0, stat: name as 'hp' })).toMatchObject({ ok: false });
+    }
+    const junk = [{}, null, 7, ['brute']] as unknown as string[];
+    for (const merc of junk) expect(g.apply({ type: 'sendMerc', player: 0, merc })).toMatchObject({ ok: false });
+    expect(g.players[0]).toMatchObject({ lumber: before.lumber, income: before.income, queuedSends: [] });
+    expect(() => runUntil(g, phaseIs('build'), 4000)).not.toThrow();
+  });
+});
+
 describe('determinism', () => {
   it('replays identically from the same seed and commands', () => {
     const run = () => {

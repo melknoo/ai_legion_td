@@ -338,7 +338,8 @@ export class Game implements GameView {
 
   private sendMerc(player: PlayerState, mercId: string): CommandResult {
     if (this.phase !== 'build' && this.phase !== 'fight') return fail('no sends right now');
-    const merc = this.data.mercs[mercId];
+    // Own keys only: 'constructor' and friends would otherwise pass as a merc.
+    const merc = typeof mercId === 'string' && Object.hasOwn(this.data.mercs, mercId) ? this.data.mercs[mercId] : undefined;
     if (!merc) return fail('unknown merc');
     if (this.wave < (merc.minWave ?? 0)) return fail(`unlocks at wave ${merc.minWave}`);
     if (player.lumber < merc.lumberCost) return fail('not enough lumber');
@@ -380,6 +381,7 @@ export class Game implements GameView {
 
   private upgradeKing(player: PlayerState, stat: KingStat): CommandResult {
     const k = this.data.rules.king;
+    if (stat !== 'hp' && stat !== 'attack' && stat !== 'regen') return fail('unknown king upgrade');
     const levels = this.kingLevels[player.team];
     const max = stat === 'hp' ? k.hpMax : stat === 'attack' ? k.attackMax : k.regenMax;
     if (levels[stat] >= max) return fail('king upgrade maxed');

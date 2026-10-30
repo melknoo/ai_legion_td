@@ -4,7 +4,6 @@ import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../asset
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
-import { WC3_BUILDER } from '../ui/builderList.ts';
 import { facesetKey } from '../ui/Hud.ts';
 import { TextInput } from '../ui/TextInput.ts';
 import { OPTION_ITEMS, clickStep } from '../ui/options.ts';
@@ -12,7 +11,7 @@ import { onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
 
-type Panel = 'main' | 'solo' | 'join' | 'name' | 'builders' | 'options';
+type Panel = 'main' | 'solo' | 'join' | 'name' | 'options';
 
 interface MenuItem {
   label: () => string;
@@ -113,9 +112,8 @@ export class TitleScene extends Phaser.Scene {
         { label: () => 'JOIN ONLINE GAME', action: () => this.show('join') },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
         { label: () => 'OPTIONS', action: () => this.show('options') },
-        { label: () => 'BUILDER LIST', action: () => this.show('builders') },
       ];
-      this.window(150, 146, 180, 94);
+      this.window(150, 146, 180, 80);
     } else if (panel === 'solo') {
       this.items = [
         { label: () => `MODE      < ${MODES[this.solo.mode].name} >`, change: (s) => this.cycleMode(s), action: () => this.cycleMode(1) },
@@ -133,10 +131,6 @@ export class TitleScene extends Phaser.Scene {
     } else if (panel === 'options') {
       this.items = [...OPTION_ITEMS.map((o) => ({ label: o.label, change: o.change, action: () => o.change(1) })), back];
       this.window(132, 150, 216, 84);
-    } else if (panel === 'builders') {
-      this.items = [back];
-      this.window(30, 114, 420, 148, 126);
-      this.builderTable(40, 120);
     } else {
       const join = panel === 'join';
       this.input_ = new TextInput(this, 160, 178, 160, {
@@ -167,19 +161,6 @@ export class TitleScene extends Phaser.Scene {
       });
       this.layer.add([t, zone]);
       return t;
-    });
-  }
-
-  /** Our builders next to the Legion TD Mega builder each one stands in for, in two columns. */
-  private builderTable(x: number, y: number): void {
-    this.layer.add(this.add.bitmapText(x, y, FONT, 'BUILDER   IN WC3 LEGION TD MEGA').setTint(0xc0c8f0));
-    Object.values(LEGION_DATA.builders).forEach((b, i) => {
-      const bx = x + Math.floor(i / 10) * 204;
-      const by = y + 12 + (i % 10) * 11;
-      this.layer.add([
-        this.add.bitmapText(bx, by, FONT, b.name.toUpperCase()),
-        this.add.bitmapText(bx + 80, by, FONT, WC3_BUILDER[b.id] ?? '-').setTint(0xfff080),
-      ]);
     });
   }
 
@@ -270,7 +251,7 @@ export class TitleScene extends Phaser.Scene {
     const logo = this.add.bitmapText(VIEW_W / 2, 40, FONT, 'LEGION').setOrigin(0.5).setScale(5).setTint(0xffd060);
     logo.enableFilters().filters!.external.addGlow(0xff8a20, 4, 0, 1, false, 10, 6);
     this.add.bitmapText(VIEW_W / 2, 82, FONT, 'P I X E L').setOrigin(0.5).setScale(2).setTint(0xe8e8f0);
-    this.add.bitmapText(VIEW_W / 2, 104, FONT, 'A LEGION TD TRIBUTE').setOrigin(0.5).setTint(0x9aa0d0);
+    this.add.bitmapText(VIEW_W / 2, 104, FONT, 'MULTIPLAYER TOWER DEFENSE').setOrigin(0.5).setTint(0x9aa0d0);
     this.tweens.add({ targets: logo, y: 43, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 }
