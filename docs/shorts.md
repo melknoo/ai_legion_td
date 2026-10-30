@@ -2,14 +2,15 @@
 
 Ziel: mit kurzen Gameplay-Clips möglichst viele Leute auf https://legion.schleiweb.de bringen. Clips werden im Spiel aufgenommen und von Claude über die Chrome-Extension in YouTube Studio hochgeladen. **Stand: nur Plan, noch nichts umgesetzt.**
 
-## 0. Kanal anlegen (vor dem ersten Upload)
+## 0. Kanal
 
-- Es gibt noch keinen Kanal. Der Owner legt ihn im eigenen Google-Konto an (Kontoerstellung und Telefon-Verifizierung macht der Owner selbst), danach hilft Claude per Chrome beim Einrichten.
-- Name: „Legion Pixel“, Handle z. B. `@legionpixel` (Verfügbarkeit prüfen).
-- Englische Kanalbeschreibung mit Link `https://legion.schleiweb.de/?ref=yt`, derselbe Link in den Kanal-Links im Profil.
-- Branding nur aus eigenen Assets: Profilbild aus den App-Icons (`tools/make-icons.mjs`), Banner aus einem Spiel-Screenshot im Pixel-Look (2560x1440, sichere Zone in der Mitte beachten).
-- Einstellungen: Standard „Nicht speziell für Kinder“, Upload-Vorlage mit Standard-Beschreibung und Tags, eine Playlist pro Content-Säule.
-- Telefon-Verifizierung einplanen (nötig für eigene Thumbnails und längere Videos).
+Kanal: [Legion Pixel – @LegionPixel67](https://www.youtube.com/@LegionPixel67), angelegt am 30.10.2026.
+
+- [x] Banner (2560x1440, [`shorts-banner.png`](shorts-banner.png)): Titelbildschirm ohne Menü, Logo in der Zone, die auf allen Geräten sichtbar ist, links Creeps und rechts Fighter auf der Wiese. Gebaut im laufenden `TitleScene` (Dev-Build, `window.__phaser`), per `renderer.snapshot` ohne Glättung hochskaliert.
+- [x] Profilbild: `client/public/icons/icon-maskable-512.png` (randlos, passt in den Kreis).
+- [x] Englische Beschreibung + Kanal-Link „Play free“ → `https://legion.schleiweb.de/?ref=yt`.
+- [ ] Upload-Vorlage (Standard-Beschreibung, Tags, „Nicht speziell für Kinder“), eine Playlist pro Content-Säule.
+- [ ] Telefon-Verifizierung (macht der Owner; nötig für eigene Thumbnails und längere Videos).
 
 ## 1. Ziel und Kennzahlen
 
@@ -88,7 +89,7 @@ Duelle und „Comment before the end“-Hooks bringen Kommentare, das hilft der 
 
 ## Reihenfolge
 
-1. Kanal anlegen und einrichten (Owner + Claude).
+1. ~~Kanal anlegen und einrichten~~ (erledigt bis auf Upload-Vorlage, Playlists und Verifizierung).
 2. Showcase-Modus + Hochformat.
 3. Aufnahme im Browser, `?ref=yt`-Zählung.
 4. Puffer von ~7 Clips aufnehmen, Owner sichtet.
