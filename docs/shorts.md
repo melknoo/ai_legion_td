@@ -1,6 +1,18 @@
-# YouTube Shorts – Plan
+# YouTube Shorts
 
-Ziel: mit kurzen Gameplay-Clips möglichst viele Leute auf https://legion.schleiweb.de bringen. Clips werden im Spiel aufgenommen und von Claude über die Chrome-Extension in YouTube Studio hochgeladen. **Stand: nur Plan, noch nichts umgesetzt.**
+Ziel: mit kurzen Gameplay-Clips möglichst viele Leute auf https://legion.schleiweb.de bringen. Clips werden im Spiel aufgenommen (`?showcase`) und von Claude über die Chrome-Extension in YouTube Studio hochgeladen.
+
+## Stand (01.11.2026) und nächste Schritte
+
+- Kanal eingerichtet, Showcase-Modus + Aufnahme gebaut, erste Woche (7 Shorts, 3.–9.11., je 17:30) geplant hochgeladen – Liste unten unter „Erster Vorrat“.
+- `?ref=yt`-Zählung ist gebaut (`/stats`, `visits.jsonl`); der Owner deployt sie am 01.11. per `npm run deploy`. Prüfen: nach dem Deploy `https://legion.schleiweb.de/?ref=yt` öffnen, dann erscheint auf `/stats` eine Zeile unter „Visits from links“.
+- Als Nächstes:
+  1. Bis ~08.11.: zweite Woche (10.–16.11.) vorbereiten – Seeds mit `scout.ts` suchen, Clips aufnehmen, Einträge an `tools/shorts/schedule.json` anhängen; der Owner committet (= Freigabe), dann hochladen wie in Abschnitt 5. Mehr Abwechslung: Fails/Leaks, Welle 30, Chimera, Devlog.
+  2. Ab ~10.11.: erste Auswertung (YouTube Analytics + `/stats`), Tabelle unten füllen.
+  3. Offen/optional: Ton lauter (Spitze ~0,1), Zeitlupe bei Boss-Tod, Duelle mit zwei Lanes, Upload-Vorlage im Kanal, Telefon-Verifizierung (Owner).
+  4. Stufe B (automatischer Upload vom Laptop per API) erst nach Google-Cloud-Einrichtung und API-Audit, siehe [shorts-upload.md](shorts-upload.md).
+
+**Auf einem anderen PC weitermachen:** `git pull`, `npm install`, `npm run dev`; Chrome mit der Claude-Erweiterung und eingeloggtem YouTube-Konto. `media/clips/` ist nicht in Git – die Clips der ersten Woche sind schon bei YouTube, und jeder Clip lässt sich aus seinem `recipe` in `schedule.json` neu aufnehmen. Für Deploys braucht der PC den SSH-Alias `legion-home` (siehe `docs/hosting.md`).
 
 ## 0. Kanal
 
@@ -9,7 +21,8 @@ Kanal: [Legion Pixel – @LegionPixel67](https://www.youtube.com/@LegionPixel67)
 - [x] Banner (2560x1440, [`shorts-banner.png`](shorts-banner.png)): Titelbildschirm ohne Menü, Logo in der Zone, die auf allen Geräten sichtbar ist, links Creeps und rechts Fighter auf der Wiese. Gebaut im laufenden `TitleScene` (Dev-Build, `window.__phaser`), per `renderer.snapshot` ohne Glättung hochskaliert.
 - [x] Profilbild: `client/public/icons/icon-maskable-512.png` (randlos, passt in den Kreis).
 - [x] Englische Beschreibung + Kanal-Link „Play free“ → `https://legion.schleiweb.de/?ref=yt`.
-- [ ] Upload-Vorlage (Standard-Beschreibung, Tags, „Nicht speziell für Kinder“), eine Playlist pro Content-Säule.
+- [x] Playlists „Boss moments“ und „Satisfying“ (weitere Säulen bekommen ihre Playlist beim ersten Clip).
+- [ ] Upload-Vorlage im Kanal (Standard-Beschreibung, Tags, „Nicht speziell für Kinder“) – bisher setzt Claude alles pro Video.
 - [ ] Telefon-Verifizierung (macht der Owner; nötig für eigene Thumbnails und längere Videos).
 
 ## 1. Ziel und Kennzahlen
@@ -43,7 +56,7 @@ Kanal: [Legion Pixel – @LegionPixel67](https://www.youtube.com/@LegionPixel67)
 
 Duelle und „Comment before the end“-Hooks bringen Kommentare, das hilft der Reichweite am meisten.
 
-## 4. Technische Umsetzung (spätere Schritte, nach Freigabe)
+## 4. Technische Umsetzung
 
 ### a) Showcase-Modus (`?showcase`) – gebaut und im Browser getestet (31.10.2026)
 
@@ -93,18 +106,19 @@ Upload per Chrome: Das Upload-Werkzeug der Erweiterung nimmt nur Dateien bis 10 
 
 ### c) Clip-Pipeline
 
-- `tools/shorts/queue.json`: pro Clip Seed, Builder, Welle, Hook-Text, Titel, Hashtags, Status.
+- `tools/shorts/schedule.json`: pro Short Clip-Datei, Rezept (URL-Parameter), Termin, Titel, Beschreibung, Tags, Playlist. Ein Eintrag, den der Owner committet, ist die Freigabe.
 - Claude nimmt Clips über Chrome auf (Seite mit Parametern öffnen, einmal klicken, Partie laufen lassen). Der Dev-Server speichert sie in `media/clips/` (gitignored; Chrome blockiert wiederholte automatische Downloads), der Owner sichtet sie.
 - Zeitplan und automatischer Upload vom Heim-Laptop: [shorts-upload.md](shorts-upload.md).
 - Rohclips und Exporte bleiben außerhalb von Git (gitignored `media/`).
 
 ## 5. Upload über Claude in Chrome
 
-- Der Owner ist in YouTube Studio eingeloggt. Claude öffnet studio.youtube.com, lädt die Datei hoch und setzt:
-  - Titel, Beschreibung (Link mit `?ref=yt`, „Inspired by Legion TD Mega, free in the browser“),
-  - Hashtags: `#shorts #towerdefense #pixelart #indiegame #legiontd`,
-  - „Nicht speziell für Kinder“, Playlist, Sichtbarkeit.
-- **Jeder Upload wird vorher vom Owner bestätigt.** Standard: als „Privat“ oder „Geplant“ hochladen, der Owner gibt frei.
+- Der Owner ist in YouTube Studio eingeloggt. Ablauf je Short (so lief die erste Woche):
+  1. Datei hochladen: bis 10 MB per `file_upload` der Erweiterung, größere zieht der Owner in den Upload-Dialog (mehrere auf einmal; die Entwürfe bleiben privat).
+  2. Claude öffnet den Entwurf („Entwurf bearbeiten“) und setzt aus `schedule.json`: Titel (endet auf `#shorts`), Beschreibung (mit `legion.schleiweb.de/?ref=yt`), Playlist, „Nein, es ist nicht speziell für Kinder“, unter „Mehr anzeigen“ die Tags.
+  3. Sichtbarkeit → „Veröffentlichungszeitpunkt festlegen“: Datum + Uhrzeit, Zeitzone GMT+01:00 (Ortszeit) → „Veröffentlichungszeitpunkt festlegen“.
+  4. Am Ende in der Shorts-Liste und unter Playlists prüfen, dass alles „Geplant“ ist und die Playlists stimmen.
+- **Hochgeladen wird nur, was in einem committeten `schedule.json`-Eintrag steht** (die Freigabe des Owners).
 - Links in Shorts-Beschreibungen sind nicht klickbar → Link im Kanalprofil, angepinnter Kommentar, „Related video“ auf ein längeres Gameplay-Video.
 - Kein Bot-artiges Verhalten: normales Tempo, keine Massen-Uploads, keine automatischen Kommentare oder Likes.
 
@@ -123,7 +137,7 @@ Upload per Chrome: Das Upload-Werkzeug der Erweiterung nimmt nur Dateien bis 10 
 ## Reihenfolge
 
 1. ~~Kanal anlegen und einrichten~~ (erledigt bis auf Upload-Vorlage, Playlists und Verifizierung).
-2. Showcase-Modus + Hochformat (erste Version gebaut).
+2. ~~Showcase-Modus + Hochformat~~ (gebaut).
 3. Aufnahme im Browser (gebaut), `?ref=yt`-Zählung (gebaut, `server/src/monitor.ts`, `/stats`).
 4. ~~Puffer von ~7 Clips aufnehmen, Owner sichtet~~ (erledigt, geplant 3.–9.11.).
-5. Täglich hochladen (mit Freigabe), wöchentlich auswerten.
+5. Wöchentlich: Clips für die nächste Woche, Freigabe per Commit, geplant hochladen, auswerten.

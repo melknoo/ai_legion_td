@@ -1,6 +1,6 @@
 # Shorts automatisch hochladen – Plan
 
-Ziel: Clips und ein Zeitplan liegen auf dem Heim-Laptop (dem Rechner, auf dem auch das Spiel läuft). Ein Timer lädt jeden Short zu seiner Zeit selbst hoch, ohne dass jemand am PC sitzt. **Stand: nur Plan, noch nichts umgesetzt.** Clips entstehen wie in [shorts.md](shorts.md) beschrieben.
+Ziel: Clips und ein Zeitplan liegen auf dem Heim-Laptop (dem Rechner, auf dem auch das Spiel läuft). Ein Timer lädt jeden Short zu seiner Zeit selbst hoch, ohne dass jemand am PC sitzt. **Stand 01.11.2026: Stufe A läuft (erste Woche per Chrome geplant hochgeladen), Stufe B ist nur Plan** – Google-Cloud-Projekt und API-Audit gibt es noch nicht. Clips entstehen wie in [shorts.md](shorts.md) beschrieben.
 
 ## Der Haken: API-Audit
 
