@@ -1,2 +1,3 @@
 -die arena kommt ja direkt nachm boss. Da müsste man nochmal n timer haben wie nach jeder runde
 -wie komme ich wieder zu games zurück falls ich versehentlich reloade? 
+-weiteres feedback: man weiß nicht was man besser machen soll weil man nicht gesehen hat was angegriffen wird - man erkennt wenig.
