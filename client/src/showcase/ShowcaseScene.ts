@@ -25,11 +25,17 @@ export interface ShowcaseParams {
   title: string;
   /** Record the first fight automatically and download it. */
   rec: boolean;
+  /** Start recording this long into the fight (ms), e.g. once the lane is full. */
+  fromMs: number;
+  /** Longest clip (ms). */
+  maxMs: number;
+  /** `len` given: a fixed-length clip (trailers) that ignores a cleared lane and shows no result. */
+  fixedLength: boolean;
 }
 
 /**
- * `?showcase&seed=42&wave=10&lane=0&title=CAN+THIS+BUILD+HOLD%3F&rec` (plus the solo
- * params `builder`, `vs`, `size`, `mode`): a bot-only game for Shorts clips.
+ * `?showcase&seed=42&wave=10&lane=0&title=CAN+THIS+BUILD+HOLD%3F&rec&from=5&len=30` (plus the
+ * solo params `builder`, `vs`, `size`, `mode`): a bot-only game for Shorts clips.
  */
 export function showcaseParams(): ShowcaseParams {
   const p = new URLSearchParams(location.search);
@@ -40,6 +46,9 @@ export function showcaseParams(): ShowcaseParams {
     lane: Math.max(0, int('lane', 0)),
     title: (p.get('title') ?? '').toUpperCase(),
     rec: p.has('rec'),
+    fromMs: Math.max(0, int('from', 0)) * 1000,
+    maxMs: Math.min(MAX_CLIP_MS, Math.max(5, int('len', MAX_CLIP_MS / 1000)) * 1000),
+    fixedLength: p.has('len'),
   };
 }
 
@@ -53,6 +62,8 @@ export class ShowcaseScene extends Phaser.Scene {
   private view!: Game;
   /** Wave of the clip being recorded. */
   private recWave = 0;
+  /** Sim time the current fight began, -1 outside fights. */
+  private fightStartMs = -1;
   /** Creeps leaked from the shown lane before this clip (the result caption counts from here). */
   private leaksBefore = 0;
   private result!: Phaser.GameObjects.BitmapText;
@@ -101,14 +112,17 @@ export class ShowcaseScene extends Phaser.Scene {
     const boss = wave % 10 === 0 ? ' - BOSS' : '';
     this.info.setText(`WAVE ${wave}${boss}\n${builder ?? ''}`);
 
-    if (this.params.rec && !this.autoDone && !this.recorder && g.phase === 'fight') this.startRecording();
+    if (g.phase !== 'fight') this.fightStartMs = -1;
+    else if (this.fightStartMs < 0) this.fightStartMs = g.timeMs;
+    const intoFight = g.phase === 'fight' && g.timeMs - this.fightStartMs >= this.params.fromMs;
+    if (this.params.rec && !this.autoDone && !this.recorder && intoFight) this.startRecording();
     if (!this.recorder) return;
     if (!this.stopAt) {
       // The wave only ends once every lane is clear: stop when the shown lane is (creeps still
       // queued to spawn count), not much later.
-      const cleared = g.phase !== 'fight' || !g.laneHasAttackers(this.params.lane);
-      if (cleared) this.showResult();
-      if (cleared || time - this.recStartedAt > MAX_CLIP_MS - TAIL_MS) this.stopAt = time + TAIL_MS;
+      const cleared = g.phase !== 'fight' || (!this.params.fixedLength && !g.laneHasAttackers(this.params.lane));
+      if (cleared && !this.params.fixedLength) this.showResult();
+      if (cleared || time - this.recStartedAt > this.params.maxMs - TAIL_MS) this.stopAt = time + TAIL_MS;
     }
     if (this.stopAt && time >= this.stopAt) this.stopRecording();
   }
