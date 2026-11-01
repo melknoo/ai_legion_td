@@ -935,7 +935,8 @@ export class Game implements GameView {
 
   // ---- helpers ----------------------------------------------------------
 
-  private laneHasAttackers(area: number): boolean {
+  /** Creeps or sends are on the lane or still queued to spawn there. */
+  laneHasAttackers(area: number): boolean {
     if (this.spawnQueue[area]! > 0) return true;
     for (const u of this.units.values()) if (u.area === area && this.isAttacker(u)) return true;
     return false;

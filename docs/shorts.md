@@ -56,7 +56,7 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 | `lane=N` | gezeigte Lane = Spielerindex (0 = eigener Sitz, bei `size=1` ist 1 der Gegner) |
 | `builder`, `vs`, `size`, `mode` | eigener Builder, Builder des ersten Gegner-Bots, Teamgröße, Modus |
 | `title=…` | Hook-Text oben (Großbuchstaben, umbricht automatisch) |
-| `rec` | nimmt den ersten Kampf auf, bis die gezeigte Lane frei ist, + 1,5 s Nachlauf (max. 58 s), und speichert `media/clips/legion-s<seed>-w<welle>-l<lane>.webm` (außerhalb des Dev-Servers: Download) |
+| `rec` | nimmt den ersten Kampf auf, bis die gezeigte Lane frei ist, + 1,5 s Nachlauf (max. 58 s), und speichert `media/clips/legion-s<seed>-w<welle>-l<lane>-<builder>.webm` (außerhalb des Dev-Servers: Download) |
 
 - Canvas 1080x1920, keine HUD (UiScene läuft unsichtbar weiter), Spielfeld 8x gezoomt in der Mitte (`SHOWCASE_FIELD` in `client/src/showcase/ShowcaseScene.ts`), darunter Welle + Builder und `LEGION.SCHLEIWEB.DE`. Die Texte sind auf 540x960 angeordnet und werden 2x gezeichnet.
 - Kamera: in der Bauphase auf die Armee, im Kampf auf den Boss (falls einer da ist), sonst auf die kämpfenden Einheiten.
@@ -69,7 +69,9 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 
 **Seeds finden:** `npx tsx tools/shorts/scout.ts <builder> [vs] [size] [anzahl]` spielt Bot-Partien ohne Bild durch (genau wie `?showcase`) und listet pro Seed die letzte Welle und die Builder. Bot-gegen-Bot-Partien enden oft früh; für Boss-Clips (Welle 10/20) Seeds mit „last wave“ ≥ 11 bzw. ≥ 21 nehmen. Beispiel: `clockwork`, Seed 7 → Welle 23 (Boss 10 und 20).
 
-**Getestete Clips:** `legion-s7-w10-l0.webm` (Boss Welle 10, ~18 s, 1080x1920, mit Ton, ~20 MB; der Boss wird am Ende getötet).
+**Ende eines Clips:** groß über dem Feld „HELD!“ (grün) oder „N LEAKED!“ (rot) – die Antwort auf die Frage im Hook. Die Lane gilt als frei, wenn dort keine Creeps/Sends mehr sind und keine mehr spawnen (`Game.laneHasAttackers`).
+
+**Erster Vorrat (01.11.2026):** 7 Clips in `media/clips/`, Zeitplan-Vorschlag in `tools/shorts/schedule.json` (3.–9.11., 17:30). Wird erst mit dem Commit des Owners freigegeben.
 
 ### b) Aufnahme im Browser – gebaut (`client/src/showcase/recorder.ts`)
 

@@ -211,7 +211,7 @@ export class BattleScene extends Phaser.Scene {
     };
     this.scene.launch('ui', link);
     // Showcase clips hide the HUD (UiScene) and draw their own captions on top.
-    if (SHOWCASE) this.scene.launch('showcase', { game, player: this.me });
+    if (SHOWCASE) this.scene.launch('showcase', { game: (this.session as LocalSession).game });
 
     this.setupInput();
     this.setView(SHOWCASE ? showcaseParams().lane : this.me);

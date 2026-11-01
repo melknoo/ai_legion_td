@@ -26,7 +26,7 @@ Der Zeitplan ist öffentlich im Repo, die Videos nicht (zu groß, und sie lassen
 [
   {
     "id": "boss-w10-s7",
-    "clip": "legion-s7-w10-l0.webm",
+    "clip": "legion-s7-w10-l0-clockwork.webm",
     "recipe": "?showcase&seed=7&wave=10&title=Can+this+build+beat+the+boss%3F&rec",
     "publishAt": "2026-11-10T17:30:00+01:00",
     "title": "Can this build beat the boss? #shorts",

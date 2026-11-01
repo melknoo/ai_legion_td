@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { GameView } from '@legion/shared';
+import type { Game } from '@legion/shared';
 import { CANVAS_W } from '../layout.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ClipRecorder } from './recorder.ts';
@@ -49,11 +49,13 @@ export function showcaseParams(): ShowcaseParams {
  * `data-clip="recording|saved"` (and `data-clip-file`) so automation can wait for the file.
  */
 export class ShowcaseScene extends Phaser.Scene {
-  private view!: GameView;
+  /** Showcase games always run locally. */
+  private view!: Game;
   /** Wave of the clip being recorded. */
   private recWave = 0;
-  /** Creeps or sends were on the shown lane during this clip (they spawn a moment after the fight starts). */
-  private sawAttackers = false;
+  /** Creeps leaked from the shown lane before this clip (the result caption counts from here). */
+  private leaksBefore = 0;
+  private result!: Phaser.GameObjects.BitmapText;
   private params!: ShowcaseParams;
   private info!: Phaser.GameObjects.BitmapText;
   private recorder: ClipRecorder | null = null;
@@ -65,7 +67,7 @@ export class ShowcaseScene extends Phaser.Scene {
     super('showcase');
   }
 
-  create(data: { game: GameView }): void {
+  create(data: { game: Game }): void {
     this.view = data.game;
     this.params = showcaseParams();
     this.cameras.main.setOrigin(0, 0).setZoom(CAPTION_ZOOM);
@@ -83,6 +85,8 @@ export class ShowcaseScene extends Phaser.Scene {
         .setTint(0xffd060);
     }
     this.info = this.add.bitmapText(center, top + height + 20, FONT, '').setOrigin(0.5, 0).setScale(3).setCenterAlign();
+    // The answer to the hook, over the field during the clip's tail.
+    this.result = this.add.bitmapText(center, top + height / 2, FONT, '').setOrigin(0.5).setScale(6).setVisible(false);
     this.add.bitmapText(center, top + height + 100, FONT, 'PLAY FREE IN YOUR BROWSER').setOrigin(0.5, 0).setScale(2).setTint(0x9aa0d0);
     this.add.bitmapText(center, top + height + 124, FONT, URL_TEXT).setOrigin(0.5, 0).setScale(3).setTint(0xe8e8f0);
     this.input.keyboard?.on('keydown-P', () => (this.recorder ? this.stopRecording() : this.startRecording()));
@@ -99,11 +103,13 @@ export class ShowcaseScene extends Phaser.Scene {
 
     if (this.params.rec && !this.autoDone && !this.recorder && g.phase === 'fight') this.startRecording();
     if (!this.recorder) return;
-    // The wave only ends once every lane is clear: stop when the shown lane is, not much later.
-    const attackers = [...g.units.values()].some((u) => u.area === this.params.lane && !u.dead && (u.kind === 'creep' || u.kind === 'merc'));
-    this.sawAttackers ||= attackers;
-    const over = g.phase !== 'fight' || (this.sawAttackers && !attackers) || time - this.recStartedAt > MAX_CLIP_MS - TAIL_MS;
-    if (!this.stopAt && over) this.stopAt = time + TAIL_MS;
+    if (!this.stopAt) {
+      // The wave only ends once every lane is clear: stop when the shown lane is (creeps still
+      // queued to spawn count), not much later.
+      const cleared = g.phase !== 'fight' || !g.laneHasAttackers(this.params.lane);
+      if (cleared) this.showResult();
+      if (cleared || time - this.recStartedAt > MAX_CLIP_MS - TAIL_MS) this.stopAt = time + TAIL_MS;
+    }
     if (this.stopAt && time >= this.stopAt) this.stopRecording();
   }
 
@@ -117,8 +123,20 @@ export class ShowcaseScene extends Phaser.Scene {
     this.recStartedAt = this.time.now;
     this.recWave = this.view.wave;
     this.stopAt = 0;
-    this.sawAttackers = false;
+    this.leaksBefore = this.view.players[this.params.lane]?.leaks ?? 0;
+    this.result.setVisible(false);
     document.body.dataset.clip = 'recording';
+  }
+
+  /** HELD! or how many creeps got through on the shown lane during the clip. */
+  private showResult(): void {
+    const leaks = (this.view.players[this.params.lane]?.leaks ?? 0) - this.leaksBefore;
+    this.result
+      .setText(leaks ? `${leaks} LEAKED!` : 'HELD!')
+      .setTint(leaks ? 0xff5050 : 0x60ff90)
+      .setVisible(true)
+      .setScale(9);
+    this.tweens.add({ targets: this.result, scale: 6, duration: 250, ease: 'Back.easeOut' });
   }
 
   private stopRecording(): void {
@@ -127,7 +145,8 @@ export class ShowcaseScene extends Phaser.Scene {
     this.recorder = null;
     this.autoDone = true;
     const { seed, lane } = this.params;
-    void rec.stop(`legion-s${seed}-w${this.recWave}-l${lane}.webm`).then((where) => {
+    const builder = this.view.players[lane]?.builder ?? 'none';
+    void rec.stop(`legion-s${seed}-w${this.recWave}-l${lane}-${builder}.webm`).then((where) => {
       document.body.dataset.clip = 'saved';
       document.body.dataset.clipFile = where;
     });
