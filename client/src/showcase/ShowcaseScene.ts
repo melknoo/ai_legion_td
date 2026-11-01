@@ -46,12 +46,14 @@ export function showcaseParams(): ShowcaseParams {
 /**
  * Captions over the showcase battlefield (hook, wave, builder, URL) and the clip recorder:
  * `?rec` records the first fight, `P` starts/stops by hand. The page body carries
- * `data-clip="recording|saved"` so automation can wait for the download.
+ * `data-clip="recording|saved"` (and `data-clip-file`) so automation can wait for the file.
  */
 export class ShowcaseScene extends Phaser.Scene {
   private view!: GameView;
   /** Wave of the clip being recorded. */
   private recWave = 0;
+  /** Creeps or sends were on the shown lane during this clip (they spawn a moment after the fight starts). */
+  private sawAttackers = false;
   private params!: ShowcaseParams;
   private info!: Phaser.GameObjects.BitmapText;
   private recorder: ClipRecorder | null = null;
@@ -90,13 +92,24 @@ export class ShowcaseScene extends Phaser.Scene {
     const g = this.view;
     const owner = g.players[this.params.lane];
     const builder = owner ? g.data.builders[owner.builder]?.name.toUpperCase() : '';
-    const boss = g.wave % 10 === 0 ? ' - BOSS' : '';
-    this.info.setText(`WAVE ${g.wave}${boss}\n${builder ?? ''}`);
+    // A clip keeps its wave number to the end, even if the next build phase starts during the tail.
+    const wave = this.recorder ? this.recWave : g.wave;
+    const boss = wave % 10 === 0 ? ' - BOSS' : '';
+    this.info.setText(`WAVE ${wave}${boss}\n${builder ?? ''}`);
 
     if (this.params.rec && !this.autoDone && !this.recorder && g.phase === 'fight') this.startRecording();
     if (!this.recorder) return;
-    if (!this.stopAt && (g.phase !== 'fight' || time - this.recStartedAt > MAX_CLIP_MS - TAIL_MS)) this.stopAt = time + TAIL_MS;
+    // The wave only ends once every lane is clear: stop when the shown lane is, not much later.
+    const attackers = [...g.units.values()].some((u) => u.area === this.params.lane && !u.dead && (u.kind === 'creep' || u.kind === 'merc'));
+    this.sawAttackers ||= attackers;
+    const over = g.phase !== 'fight' || (this.sawAttackers && !attackers) || time - this.recStartedAt > MAX_CLIP_MS - TAIL_MS;
+    if (!this.stopAt && over) this.stopAt = time + TAIL_MS;
     if (this.stopAt && time >= this.stopAt) this.stopRecording();
+  }
+
+  /** A clip is being recorded (BattleScene holds the picture during its tail). */
+  get recording(): boolean {
+    return this.recorder !== null;
   }
 
   private startRecording(): void {
@@ -104,6 +117,7 @@ export class ShowcaseScene extends Phaser.Scene {
     this.recStartedAt = this.time.now;
     this.recWave = this.view.wave;
     this.stopAt = 0;
+    this.sawAttackers = false;
     document.body.dataset.clip = 'recording';
   }
 
@@ -113,6 +127,9 @@ export class ShowcaseScene extends Phaser.Scene {
     this.recorder = null;
     this.autoDone = true;
     const { seed, lane } = this.params;
-    void rec.stop(`legion-s${seed}-w${this.recWave}-l${lane}.webm`).then(() => (document.body.dataset.clip = 'saved'));
+    void rec.stop(`legion-s${seed}-w${this.recWave}-l${lane}.webm`).then((where) => {
+      document.body.dataset.clip = 'saved';
+      document.body.dataset.clipFile = where;
+    });
   }
 }

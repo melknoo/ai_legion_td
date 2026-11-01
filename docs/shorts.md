@@ -56,19 +56,20 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 | `lane=N` | gezeigte Lane = Spielerindex (0 = eigener Sitz, bei `size=1` ist 1 der Gegner) |
 | `builder`, `vs`, `size`, `mode` | eigener Builder, Builder des ersten Gegner-Bots, Teamgröße, Modus |
 | `title=…` | Hook-Text oben (Großbuchstaben, umbricht automatisch) |
-| `rec` | nimmt den ersten Kampf auf (bis Wellenende + 1,5 s, max. 58 s) und lädt `legion-s<seed>-w<welle>-l<lane>.webm` herunter |
+| `rec` | nimmt den ersten Kampf auf, bis die gezeigte Lane frei ist, + 1,5 s Nachlauf (max. 58 s), und speichert `media/clips/legion-s<seed>-w<welle>-l<lane>.webm` (außerhalb des Dev-Servers: Download) |
 
 - Canvas 1080x1920, keine HUD (UiScene läuft unsichtbar weiter), Spielfeld 8x gezoomt in der Mitte (`SHOWCASE_FIELD` in `client/src/showcase/ShowcaseScene.ts`), darunter Welle + Builder und `LEGION.SCHLEIWEB.DE`. Die Texte sind auf 540x960 angeordnet und werden 2x gezeichnet.
 - Kamera: in der Bauphase auf die Armee, im Kampf auf den Boss (falls einer da ist), sonst auf die kämpfenden Einheiten.
 - Spieler 0 spielt per `botCommands` (`LocalSession` mit `autopilot`), Bauphasen laufen 6x schneller.
 - Showcase-Spiele gehen nicht in die `/solo`-Statistik.
-- `P` startet/stoppt eine Aufnahme von Hand. Während der Aufnahme steht `data-clip="recording"` am `<body>`, danach `saved`.
+- `P` startet/stoppt eine Aufnahme von Hand. Während der Aufnahme steht `data-clip="recording"` am `<body>`, danach `saved` und in `data-clip-file` der Pfad.
+- Ende eines Clips: Die Welle endet erst, wenn alle Lanes frei sind, und im selben Tick setzt die Simulation die Fighter zurück. Darum stoppt die Aufnahme, sobald die gezeigte Lane frei ist; endet die Welle vorher (letzter Kill oder Leak), hält BattleScene Simulation und Kamera für den Nachlauf an.
 - Ton kommt nur mit, wenn der Browser Audio freigegeben hat: einmal auf die Seite klicken, bevor der Kampf beginnt.
 - Noch offen: Zeitlupe bei Kills/Boss-Tod, Duelle mit zwei Lanes übereinander. Große Boss-Sprites in der obersten Reihe werden oben etwas angeschnitten.
 
 **Seeds finden:** `npx tsx tools/shorts/scout.ts <builder> [vs] [size] [anzahl]` spielt Bot-Partien ohne Bild durch (genau wie `?showcase`) und listet pro Seed die letzte Welle und die Builder. Bot-gegen-Bot-Partien enden oft früh; für Boss-Clips (Welle 10/20) Seeds mit „last wave“ ≥ 11 bzw. ≥ 21 nehmen. Beispiel: `clockwork`, Seed 7 → Welle 23 (Boss 10 und 20).
 
-**Getestete Clips:** `legion-s7-w10-l0.webm` (Boss Welle 10, 17,6 s, 1080x1920, mit Ton, ~23 MB).
+**Getestete Clips:** `legion-s7-w10-l0.webm` (Boss Welle 10, ~18 s, 1080x1920, mit Ton, ~20 MB; der Boss wird am Ende getötet).
 
 ### b) Aufnahme im Browser – gebaut (`client/src/showcase/recorder.ts`)
 
@@ -79,7 +80,8 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 ### c) Clip-Pipeline
 
 - `tools/shorts/queue.json`: pro Clip Seed, Builder, Welle, Hook-Text, Titel, Hashtags, Status.
-- Claude nimmt Clips über Chrome auf (Seite mit Parametern öffnen, Partie laufen lassen, Datei landet im Downloads-Ordner), der Owner sichtet sie.
+- Claude nimmt Clips über Chrome auf (Seite mit Parametern öffnen, einmal klicken, Partie laufen lassen). Der Dev-Server speichert sie in `media/clips/` (gitignored; Chrome blockiert wiederholte automatische Downloads), der Owner sichtet sie.
+- Zeitplan und automatischer Upload vom Heim-Laptop: [shorts-upload.md](shorts-upload.md).
 - Rohclips und Exporte bleiben außerhalb von Git (gitignored `media/`).
 
 ## 5. Upload über Claude in Chrome

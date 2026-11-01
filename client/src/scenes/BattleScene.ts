@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey, type SoundKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM as HUD_FIELD_ZOOM, SCALE, SHOWCASE, UI_ZOOM, VIEW_W } from '../layout.ts';
-import { SHOWCASE_FIELD, showcaseParams } from '../showcase/ShowcaseScene.ts';
+import { SHOWCASE_FIELD, showcaseParams, type ShowcaseScene } from '../showcase/ShowcaseScene.ts';
 import { ellipseTexture } from '../render/ellipse.ts';
 import { FX_SOUND, SHOT_SOUND, sfx } from '../audio/sfx.ts';
 import { attackStyle } from '../render/attackStyle.ts';
@@ -223,12 +223,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   override update(_time: number, delta: number): void {
+    // The tail of a showcase clip after the wave ended holds the last picture, camera included: the
+    // sim already put the fighters back on their cells in the tick the last creep died or leaked.
+    const holdClip = () => SHOWCASE && this.session.game.phase !== 'fight' && (this.scene.get('showcase') as ShowcaseScene).recording;
     // Showcase clips hurry through the build phases, which make dull footage.
-    const events = this.session.update(SHOWCASE && this.session.game.phase === 'build' ? delta * SHOWCASE_FIELD.buildSpeed : delta);
+    const speed = SHOWCASE && this.session.game.phase === 'build' ? SHOWCASE_FIELD.buildSpeed : 1;
+    const events = holdClip() ? [] : this.session.update(delta * speed);
     // A tick's attack and the damage it deals arrive together, so landings only live for one frame.
     this.landing.clear();
     for (const ev of events) this.handleEvent(ev);
-    this.updateCamera(delta / 1000);
+    if (!holdClip()) this.updateCamera(delta / 1000);
     // Units move under a resting mouse, so re-check the hover target every frame. A finger
     // leaves no resting pointer: there the tap selects.
     const pointer = this.input.activePointer;
@@ -239,7 +243,7 @@ export class BattleScene extends Phaser.Scene {
       if (placed) this.selectedUnit = placed.id;
       if (placed || this.time.now > this.pendingSelect.until) this.pendingSelect = null;
     }
-    this.syncUnits();
+    if (!holdClip()) this.syncUnits();
     this.trails.draw();
     this.drawGrid();
   }
@@ -288,7 +292,8 @@ export class BattleScene extends Phaser.Scene {
     const attackers = units.filter((u) => u.kind === 'creep' || u.kind === 'merc');
     // Watch the head of the incoming wave.
     if (attackers.length) return Math.max(...attackers.map((u) => u.x)) * SCALE - 40;
-    return gridCenter;
+    // A cleared lane in a showcase clip: hold the shot where the fight ended.
+    return SHOWCASE ? this.camX : gridCenter;
   }
 
   /** Pointer position in field pixels, or null outside the battlefield viewport. */
@@ -848,7 +853,8 @@ export class BattleScene extends Phaser.Scene {
         this.lastPhase = ev.phase;
         if (ev.phase === 'arena') {
           this.ui.showBanner(['ARENA BATTLE!', 'ALL ARMIES CLASH'], 2000);
-          this.setView(game.battleArena());
+          // Showcase clips stay on their lane.
+          if (!SHOWCASE) this.setView(game.battleArena());
           return;
         }
         if (ev.phase === 'build' && prev !== 'fight') return; // after the arena: its own banner said it all

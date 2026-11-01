@@ -28,18 +28,31 @@ export class ClipRecorder {
     this.recorder.start(1000);
   }
 
-  /** Ends the recording and downloads it as `name`. */
-  stop(name: string): Promise<void> {
+  /**
+   * Ends the recording and saves it as `name`: the dev server stores it in `media/clips/`,
+   * elsewhere the browser downloads it. Resolves to where it went.
+   */
+  stop(name: string): Promise<string> {
     return new Promise((resolve) => {
       this.recorder.onstop = () => {
         this.detachAudio();
-        const url = URL.createObjectURL(new Blob(this.chunks, { type: 'video/webm' }));
-        const a = Object.assign(document.createElement('a'), { href: url, download: name });
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 10_000);
-        resolve();
+        const blob = new Blob(this.chunks, { type: 'video/webm' });
+        resolve(import.meta.env.DEV ? upload(blob, name).catch(() => download(blob, name)) : download(blob, name));
       };
       this.recorder.stop();
     });
   }
+}
+
+async function upload(blob: Blob, name: string): Promise<string> {
+  const res = await fetch(`/__clips/${encodeURIComponent(name)}`, { method: 'POST', body: blob });
+  if (!res.ok) throw new Error(`clip upload: ${res.status}`);
+  return ((await res.json()) as { file: string }).file;
+}
+
+function download(blob: Blob, name: string): string {
+  const url = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'), { href: url, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return `download: ${name}`;
 }
