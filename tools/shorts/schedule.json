@@ -1,12 +1,36 @@
 [
   {
+    "id": "trailer-grove-s17-w27",
+    "clip": "legion-s17-w27-l0-grove.webm",
+    "recipe": "?showcase&builder=grove&seed=17&wave=27&title=18+builders+232+fighters+31+waves&rec&from=5&len=25",
+    "publishAt": "2026-11-01T19:00:00+01:00",
+    "title": "Legion Pixel – free tower defense in your browser #shorts",
+    "description": "18 builders, 232 fighters, 31 waves. A free multiplayer tower defense in your browser: build your lane, send mercenaries, defend your king – solo against bots or online, 1v1 up to 4v4.\n\nInspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "multiplayer"
+    ],
+    "playlist": null
+  },
+  {
     "id": "boss10-grove-s7",
     "clip": "legion-s7-w10-l0-grove.webm",
     "recipe": "?showcase&builder=grove&seed=7&wave=10&title=Can+this+build+beat+the+boss%3F&rec",
     "publishAt": "2026-11-03T17:30:00+01:00",
     "title": "Can this build beat the first boss? #shorts",
     "description": "Grove vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   },
   {
@@ -16,7 +40,14 @@
     "publishAt": "2026-11-04T17:30:00+01:00",
     "title": "Will Frost hold the boss? #shorts",
     "description": "Frost vs. the wave 10 boss. Did it hold?\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   },
   {
@@ -26,7 +57,14 @@
     "publishAt": "2026-11-05T17:30:00+01:00",
     "title": "Three wave 20 bosses vs. Warclan #shorts",
     "description": "Wave 20 sends three bosses down the lane. Warclan was ready.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   },
   {
@@ -36,7 +74,14 @@
     "publishAt": "2026-11-06T17:30:00+01:00",
     "title": "Watch the whole wave melt #shorts",
     "description": "Wave 15 against a Grove lane.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "satisfying"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "satisfying"
+    ],
     "playlist": "Satisfying"
   },
   {
@@ -46,7 +91,14 @@
     "publishAt": "2026-11-07T17:30:00+01:00",
     "title": "Can Tidal stop the boss? #shorts",
     "description": "Tidal vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   },
   {
@@ -56,7 +108,14 @@
     "publishAt": "2026-11-08T17:30:00+01:00",
     "title": "Can Canopy survive wave 20? #shorts",
     "description": "Canopy vs. three wave 20 bosses.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   },
   {
@@ -66,7 +125,14 @@
     "publishAt": "2026-11-09T17:30:00+01:00",
     "title": "Clockwork vs. the first boss #shorts",
     "description": "Clockwork vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
-    "tags": ["tower defense", "pixel art", "indie game", "browser game", "legion td", "boss fight"],
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
     "playlist": "Boss moments"
   }
 ]
