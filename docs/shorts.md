@@ -20,6 +20,7 @@ Kanal: [Legion Pixel – @LegionPixel67](https://www.youtube.com/@LegionPixel67)
 
 - [x] Banner (2560x1440, [`shorts-banner.png`](shorts-banner.png)): Titelbildschirm ohne Menü, Logo in der Zone, die auf allen Geräten sichtbar ist, links Creeps und rechts Fighter auf der Wiese. Gebaut im laufenden `TitleScene` (Dev-Build, `window.__phaser`), per `renderer.snapshot` ohne Glättung hochskaliert.
 - [x] Profilbild: `client/public/icons/icon-maskable-512.png` (randlos, passt in den Kreis).
+- [x] Kanal-Keywords (01.11.): legion pixel, tower defense, pixel art, browser game, legion td, indie game, multiplayer. Wohnsitzland nicht gesetzt (Sache des Owners).
 - [x] Englische Beschreibung + Kanal-Link „Play free“ → `https://legion.schleiweb.de/?ref=yt`.
 - [x] Playlists „Boss moments“ und „Satisfying“ (weitere Säulen bekommen ihre Playlist beim ersten Clip).
 - [ ] Upload-Vorlage im Kanal (Standard-Beschreibung, Tags, „Nicht speziell für Kinder“) – bisher setzt Claude alles pro Video.
