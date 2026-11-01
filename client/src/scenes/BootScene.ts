@@ -5,7 +5,7 @@ import {
 } from '../assets/manifest.ts';
 import { bakeHue } from '../render/hue.ts';
 import { makeGroundTextures } from '../render/groundTextures.ts';
-import { layoutCamera } from '../layout.ts';
+import { SHOWCASE, layoutCamera } from '../layout.ts';
 import { makePixelIcons } from '../ui/pixelIcons.ts';
 
 export const FONT = 'font8';
@@ -84,7 +84,7 @@ export class BootScene extends Phaser.Scene {
     // Deep links: `?room=CODE` / `?online` open the lobby, `?builder=...` a solo game; otherwise the title.
     const params = new URLSearchParams(location.search);
     if (params.has('online') || params.has('room')) this.scene.start('lobby');
-    else if (params.has('builder')) this.scene.start('battle');
+    else if (params.has('builder') || SHOWCASE) this.scene.start('battle');
     else this.scene.start('title');
   }
 

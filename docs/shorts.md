@@ -45,19 +45,36 @@ Duelle und „Comment before the end“-Hooks bringen Kommentare, das hilft der 
 
 ## 4. Technische Umsetzung (spätere Schritte, nach Freigabe)
 
-### a) Showcase-Modus im Client (`?showcase`)
+### a) Showcase-Modus (`?showcase`) – gebaut und im Browser getestet (31.10.2026)
 
-- Spieler 0 wird ebenfalls von `botCommands` (`shared/src/sim/bot.ts`) gesteuert.
-- `?seed=` wird an `LocalSession` (`client/src/session/LocalSession.ts`, nimmt schon einen Seed) durchgereicht → Partien sind reproduzierbar.
-- `?wave=N` / Startgold, um direkt zu interessanten Wellen zu springen; optional feste Builds pro Seite für Duelle. Baut auf `soloFromUrl()` in `client/src/scenes/BattleScene.ts` auf.
-- HUD ausblenden, „Regie“-Kamera: Zoom auf das dichteste Kampfgeschehen, kurze Zeitlupe bei großen Kills und Boss-Tod.
-- Hochformat: eigenes Layout 540x960 (Canvas-Größe per Parameter), Textbalken oben/unten mit Hook-Text aus `?title=` und der Spiel-URL als Wasserzeichen.
+Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsair&title=Can+this+build+hold+the+boss%3F&rec&timeout`
 
-### b) Aufnahme im Browser
+| Parameter | Wirkung |
+|---|---|
+| `seed=N` | Partie reproduzierbar (auch die zufälligen Builder), Standard 1 |
+| `wave=N` | spielt ohne Rendern bis zur Bauphase von Welle N vor |
+| `lane=N` | gezeigte Lane = Spielerindex (0 = eigener Sitz, bei `size=1` ist 1 der Gegner) |
+| `builder`, `vs`, `size`, `mode` | eigener Builder, Builder des ersten Gegner-Bots, Teamgröße, Modus |
+| `title=…` | Hook-Text oben (Großbuchstaben, umbricht automatisch) |
+| `rec` | nimmt den ersten Kampf auf (bis Wellenende + 1,5 s, max. 58 s) und lädt `legion-s<seed>-w<welle>-l<lane>.webm` herunter |
 
-- `canvas.captureStream(60)` + Audio aus dem WebAudio-Kontext (`MediaStreamAudioDestinationNode`) → `MediaRecorder` → WebM-Download.
-- Start/Stopp per Taste oder automatisch über Spiel-Events (Welle startet/endet, Boss stirbt).
-- Optional Nachbearbeitung mit ffmpeg (WebM → MP4, schneiden, Lautstärke normalisieren) per Script in `tools/shorts/`. Keine neuen npm-Pakete nötig.
+- Canvas 1080x1920, keine HUD (UiScene läuft unsichtbar weiter), Spielfeld 8x gezoomt in der Mitte (`SHOWCASE_FIELD` in `client/src/showcase/ShowcaseScene.ts`), darunter Welle + Builder und `LEGION.SCHLEIWEB.DE`. Die Texte sind auf 540x960 angeordnet und werden 2x gezeichnet.
+- Kamera: in der Bauphase auf die Armee, im Kampf auf den Boss (falls einer da ist), sonst auf die kämpfenden Einheiten.
+- Spieler 0 spielt per `botCommands` (`LocalSession` mit `autopilot`), Bauphasen laufen 6x schneller.
+- Showcase-Spiele gehen nicht in die `/solo`-Statistik.
+- `P` startet/stoppt eine Aufnahme von Hand. Während der Aufnahme steht `data-clip="recording"` am `<body>`, danach `saved`.
+- Ton kommt nur mit, wenn der Browser Audio freigegeben hat: einmal auf die Seite klicken, bevor der Kampf beginnt.
+- Noch offen: Zeitlupe bei Kills/Boss-Tod, Duelle mit zwei Lanes übereinander. Große Boss-Sprites in der obersten Reihe werden oben etwas angeschnitten.
+
+**Seeds finden:** `npx tsx tools/shorts/scout.ts <builder> [vs] [size] [anzahl]` spielt Bot-Partien ohne Bild durch (genau wie `?showcase`) und listet pro Seed die letzte Welle und die Builder. Bot-gegen-Bot-Partien enden oft früh; für Boss-Clips (Welle 10/20) Seeds mit „last wave“ ≥ 11 bzw. ≥ 21 nehmen. Beispiel: `clockwork`, Seed 7 → Welle 23 (Boss 10 und 20).
+
+**Getestete Clips:** `legion-s7-w10-l0.webm` (Boss Welle 10, 17,6 s, 1080x1920, mit Ton, ~23 MB).
+
+### b) Aufnahme im Browser – gebaut (`client/src/showcase/recorder.ts`)
+
+- `canvas.captureStream(30)` + Abgriff am Master-Gain des Phaser-WebAudio → `MediaRecorder` (VP9/Opus, 12 Mbit/s) → WebM-Download.
+- Mit `?timeout` läuft das Spiel mit 30 fps, auch wenn das Chrome-Fenster im Hintergrund ist. Der Ton ist eher leise (Spitze ~0,1); bei Bedarf später normalisieren.
+- YouTube nimmt WebM direkt an; ffmpeg ist auf dem Dev-Rechner nicht installiert, Nachbearbeitung erst bei Bedarf.
 
 ### c) Clip-Pipeline
 
@@ -90,7 +107,7 @@ Duelle und „Comment before the end“-Hooks bringen Kommentare, das hilft der 
 ## Reihenfolge
 
 1. ~~Kanal anlegen und einrichten~~ (erledigt bis auf Upload-Vorlage, Playlists und Verifizierung).
-2. Showcase-Modus + Hochformat.
-3. Aufnahme im Browser, `?ref=yt`-Zählung.
+2. Showcase-Modus + Hochformat (erste Version gebaut).
+3. Aufnahme im Browser (gebaut), `?ref=yt`-Zählung (offen).
 4. Puffer von ~7 Clips aufnehmen, Owner sichtet.
 5. Täglich hochladen (mit Freigabe), wöchentlich auswerten.

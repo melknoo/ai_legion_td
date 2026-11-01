@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { GameView } from '@legion/shared';
 import type { ChatLog } from '../net/ChatLog.ts';
 import { ChatBox } from '../ui/ChatBox.ts';
-import { FIELD_H, FIELD_TOP, VIEW_W, layoutCamera } from '../layout.ts';
+import { FIELD_H, FIELD_TOP, SHOWCASE, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
 import { MiniButton } from '../ui/SlotButton.ts';
@@ -50,6 +50,8 @@ export class UiScene extends Phaser.Scene {
 
   create(link: UiLink): void {
     layoutCamera(this);
+    // Showcase clips run without a HUD (the scene keeps running for BattleScene's calls).
+    if (SHOWCASE) this.scene.setVisible(false);
     this.link = link;
     this.chart = null;
     this.closeOptions = null;

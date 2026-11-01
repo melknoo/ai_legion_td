@@ -5,8 +5,10 @@ import type Phaser from 'phaser';
 export const VIEW_W = 480;
 export const VIEW_H = 270;
 export const UI_ZOOM = 2;
-export const CANVAS_W = VIEW_W * UI_ZOOM;
-export const CANVAS_H = VIEW_H * UI_ZOOM;
+/** `?showcase`: bots only, no HUD, a 9:16 canvas for Shorts clips (see docs/shorts.md). */
+export const SHOWCASE = new URLSearchParams(location.search).has('showcase');
+export const CANVAS_W = SHOWCASE ? 1080 : VIEW_W * UI_ZOOM;
+export const CANVAS_H = SHOWCASE ? 1920 : VIEW_H * UI_ZOOM;
 
 /** Battlefield viewport between the top bar and the bottom panels (layout pixels). */
 export const FIELD_TOP = 25;

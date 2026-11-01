@@ -6,6 +6,7 @@ import { BootScene } from './scenes/BootScene.ts';
 import { LobbyScene } from './scenes/LobbyScene.ts';
 import { TitleScene } from './scenes/TitleScene.ts';
 import { UiScene } from './scenes/UiScene.ts';
+import { ShowcaseScene } from './showcase/ShowcaseScene.ts';
 import { installTouchShell } from './ui/touch.ts';
 
 // The dev server has no /client-error next to the page; there the console is enough.
@@ -36,7 +37,7 @@ const game = new Phaser.Game({
   roundPixels: true,
   backgroundColor: '#0b0b18',
   scale: { mode: Phaser.Scale.NONE, zoom: zoomFor(), autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, TitleScene, LobbyScene, BattleScene, UiScene],
+  scene: [BootScene, TitleScene, LobbyScene, BattleScene, UiScene, ShowcaseScene],
 });
 
 window.addEventListener('resize', () => game.scale.setZoom(zoomFor()));

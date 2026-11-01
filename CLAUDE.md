@@ -42,5 +42,5 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
 - Mobile: first version is in (PWA, touch controls, see README). Not yet checked on a real phone/tablet; desktop Chrome has no touch, so tests feed touch events into `game.input.onTouchStart/Move/End`. Command-card slots on phones are ~55x36 CSS px, MiniButtons were enlarged for touch only. Possible next steps: Play Store via TWA (Bubblewrap), bigger touch layout after the WC3-style HUD rework.
-- YouTube Shorts: plan in `docs/shorts.md` (channel, showcase mode, in-browser recording, uploads via Claude in Chrome), not implemented yet.
+- YouTube Shorts: plan and status in `docs/shorts.md`. Channel is set up; `?showcase` (`client/src/showcase/`, 1080x1920 clips via `?rec`) works; `tools/shorts/scout.ts` finds seeds that reach a given wave. Uploads via Claude in Chrome still to do.
 - Later: "Prophet Randomize" mode (new roster every wave), leak-bounty factor, team-size balancing, music, client auto-reconnect, `npm audit` warnings.

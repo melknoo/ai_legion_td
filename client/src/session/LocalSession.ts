@@ -1,6 +1,7 @@
 import {
   Game,
   PROPHET,
+  Rng,
   TICK_MS,
   botCommands,
   modeLocksBuilder,
@@ -20,6 +21,14 @@ export interface SoloConfig {
   /** Players per team; bots fill every seat but the local player's. */
   teamSize: number;
   mode: ModeId;
+  /** Builder of the first foe bot (showcase duels); random otherwise. */
+  foe?: string;
+}
+
+export interface LocalOptions {
+  seed?: number;
+  /** A bot plays the local seat too (showcase clips). */
+  autopilot?: boolean;
 }
 
 /** Runs the simulation in the browser: the local player plus bot allies and opponents. */
@@ -29,10 +38,15 @@ export class LocalSession implements Session {
   readonly online = false;
   private acc = 0;
   private readonly prev = new Map<number, { x: number; y: number; area: number }>();
+  /** First seat a bot plays: 0 when the local seat runs on autopilot. */
+  private readonly firstBot: number;
 
-  constructor(data: GameData, config: SoloConfig, seed = Date.now() % 100000) {
+  constructor(data: GameData, config: SoloConfig, { seed = Date.now() % 100000, autopilot = false }: LocalOptions = {}) {
+    this.firstBot = autopilot ? 0 : 1;
+    // A seeded game rolls its builders from the seed as well, so it replays exactly.
+    const rng = new Rng(seed);
     const ids = rollableBuilders(data);
-    const random = () => (config.mode === 'apr' ? PROPHET : ids[Math.floor(Math.random() * ids.length)]!);
+    const random = () => (config.mode === 'apr' ? PROPHET : rng.pick(ids)!);
     const seat = (name: string, team: TeamId, builder = random()) => ({ id: name.toLowerCase(), name, team, builder });
     this.game = new Game({
       seed,
@@ -40,7 +54,7 @@ export class LocalSession implements Session {
       players: [
         seat('You', 0, modeLocksBuilder(config.mode) ? random() : config.builder),
         ...Array.from({ length: config.teamSize - 1 }, (_, i) => seat(`Ally ${i + 1}`, 0)),
-        ...Array.from({ length: config.teamSize }, (_, i) => seat(`Bot ${i + 1}`, 1)),
+        ...Array.from({ length: config.teamSize }, (_, i) => seat(`Bot ${i + 1}`, 1, i === 0 && config.foe ? config.foe : random())),
       ],
     });
   }
@@ -50,12 +64,22 @@ export class LocalSession implements Session {
     const events: GameEvent[] = [];
     while (this.acc >= TICK_MS) {
       this.acc -= TICK_MS;
-      for (let p = 1; p < this.game.players.length; p++) for (const cmd of botCommands(this.game, p)) this.game.apply(cmd);
-      this.prev.clear();
-      for (const u of this.game.units.values()) this.prev.set(u.id, { x: u.x, y: u.y, area: u.area });
-      events.push(...this.game.tick());
+      events.push(...this.step());
     }
     return events;
+  }
+
+  /** Plays ahead without rendering until the build phase of `wave` (or the end of the game). */
+  skipToWave(wave: number): void {
+    const g = this.game;
+    for (let i = 0; i < 400_000 && g.phase !== 'over' && !(g.wave >= wave && g.phase === 'build'); i++) this.step();
+  }
+
+  private step(): GameEvent[] {
+    for (let p = this.firstBot; p < this.game.players.length; p++) for (const cmd of botCommands(this.game, p)) this.game.apply(cmd);
+    this.prev.clear();
+    for (const u of this.game.units.values()) this.prev.set(u.id, { x: u.x, y: u.y, area: u.area });
+    return this.game.tick();
   }
 
   /** Position between the last two ticks, for smooth rendering. */

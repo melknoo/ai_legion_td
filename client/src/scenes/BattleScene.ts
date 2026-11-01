@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey, type SoundKey } from '../assets/manifest.ts';
-import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM, SCALE, UI_ZOOM, VIEW_W } from '../layout.ts';
+import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM as HUD_FIELD_ZOOM, SCALE, SHOWCASE, UI_ZOOM, VIEW_W } from '../layout.ts';
+import { SHOWCASE_FIELD, showcaseParams } from '../showcase/ShowcaseScene.ts';
 import { ellipseTexture } from '../render/ellipse.ts';
 import { FX_SOUND, SHOT_SOUND, sfx } from '../audio/sfx.ts';
 import { attackStyle } from '../render/attackStyle.ts';
@@ -19,6 +20,8 @@ import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
 
 const AURA_GLOW: Record<AuraStat, number> = { damage: 0xff6040, armor: 0x60a0ff, attackSpeed: 0xffe060, regen: 0x60ff90 };
+/** Canvas pixels per field pixel; showcase clips zoom in closer. */
+const FIELD_ZOOM = SHOWCASE ? SHOWCASE_FIELD.zoom : HUD_FIELD_ZOOM;
 /** Visible battlefield size in field pixels at the camera zoom. */
 const VIEW_FIELD_W = CANVAS_W / FIELD_ZOOM;
 const LANE_PX = { w: LANE.width * SCALE, h: LANE.height * SCALE };
@@ -136,7 +139,11 @@ export class BattleScene extends Phaser.Scene {
     const data = new URLSearchParams(location.search).has('fast')
       ? { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0 } }
       : LEGION_DATA;
-    return new LocalSession(data, config);
+    if (!SHOWCASE) return new LocalSession(data, config);
+    const { seed, wave } = showcaseParams();
+    const session = new LocalSession(data, config, { seed, autopilot: true });
+    if (wave > 1) session.skipToWave(wave);
+    return session;
   }
 
   create(): void {
@@ -159,7 +166,9 @@ export class BattleScene extends Phaser.Scene {
     this.selArrow = this.add.triangle(0, 0, 0, 0, 6, 0, 3, 4, 0xfff060).setStrokeStyle(1, 0x303048).setOrigin(0.5, 1).setVisible(false).setDepth(9998);
 
     const cam = this.cameras.main;
-    cam.setViewport(0, FIELD_TOP * UI_ZOOM, CANVAS_W, FIELD_H * UI_ZOOM).setZoom(FIELD_ZOOM).setBackgroundColor('#0b0b18');
+    if (SHOWCASE) cam.setViewport(0, SHOWCASE_FIELD.top, CANVAS_W, SHOWCASE_FIELD.height);
+    else cam.setViewport(0, FIELD_TOP * UI_ZOOM, CANVAS_W, FIELD_H * UI_ZOOM);
+    cam.setZoom(FIELD_ZOOM).setBackgroundColor('#0b0b18');
     cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.3);
 
     const game = this.session.game;
@@ -201,17 +210,21 @@ export class BattleScene extends Phaser.Scene {
       }),
     };
     this.scene.launch('ui', link);
+    // Showcase clips hide the HUD (UiScene) and draw their own captions on top.
+    if (SHOWCASE) this.scene.launch('showcase', { game, player: this.me });
 
     this.setupInput();
-    this.setView(this.me);
+    this.setView(SHOWCASE ? showcaseParams().lane : this.me);
 
-    this.soloReport = this.solo ? new SoloReport(this.session.game, this.solo) : null;
+    // Showcase games are not real games: keep them out of the stats.
+    this.soloReport = this.solo && !SHOWCASE ? new SoloReport(this.session.game, this.solo) : null;
     // Menu or play again before the end: the game was left.
     this.events.once('shutdown', () => this.soloReport?.end(null, true));
   }
 
   override update(_time: number, delta: number): void {
-    const events = this.session.update(delta);
+    // Showcase clips hurry through the build phases, which make dull footage.
+    const events = this.session.update(SHOWCASE && this.session.game.phase === 'build' ? delta * SHOWCASE_FIELD.buildSpeed : delta);
     // A tick's attack and the damage it deals arrive together, so landings only live for one frame.
     this.landing.clear();
     for (const ev of events) this.handleEvent(ev);
@@ -261,8 +274,15 @@ export class BattleScene extends Phaser.Scene {
   private autoCameraX(): number {
     const game = this.session.game;
     const gridCenter = (LANE.gridX + (LANE.gridCols * CELL) / 2) * SCALE;
-    if (game.phase !== 'fight') return gridCenter;
     const units = [...game.units.values()].filter((u) => u.area === this.viewArea && !u.dead && u.kind !== 'king');
+    if (game.phase !== 'fight') {
+      // Showcase clips are too narrow for the whole grid: frame the army instead.
+      const army = SHOWCASE ? units.filter((u) => u.kind === 'fighter') : [];
+      return army.length ? (army.reduce((n, u) => n + u.x, 0) / army.length) * SCALE : gridCenter;
+    }
+    // A boss clip is about the boss: keep it in frame.
+    const boss = SHOWCASE ? units.find((u) => u.kind === 'creep' && game.def(u).boss) : undefined;
+    if (boss) return boss.x * SCALE;
     const engaged = units.filter((u) => u.targetId !== null);
     if (engaged.length) return (engaged.reduce((n, u) => n + u.x, 0) / engaged.length) * SCALE;
     const attackers = units.filter((u) => u.kind === 'creep' || u.kind === 'merc');
@@ -981,7 +1001,7 @@ export class BattleScene extends Phaser.Scene {
     const x0 = LANE.gridX * SCALE;
     const cs = CELL * SCALE;
     this.kingMark.setVisible(lane);
-    this.youMark.setVisible(lane && own && build);
+    this.youMark.setVisible(lane && own && build && !SHOWCASE);
     if (!lane) return;
     // While building, the own grid is framed in the player's gold with a bobbing "YOU" above it.
     if (own && build) {
@@ -1027,5 +1047,6 @@ function soloFromUrl(): SoloConfig {
     builder: wanted && builders.includes(wanted) ? wanted : builders[0]!,
     teamSize: Math.min(4, Math.max(1, Number(params.get('size')) || 1)),
     mode: MODE_IDS.includes(mode) ? mode : 'ap',
+    foe: params.get('vs') && builders.includes(params.get('vs')!) ? params.get('vs')! : undefined,
   };
 }
