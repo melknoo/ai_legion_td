@@ -1,17 +1,21 @@
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import path from 'node:path';
 import { LEGION_DATA, MAX_TEAM_SIZE, MODE_IDS, type ModeId } from '@legion/shared';
 
 // Monitoring for the single home-server instance: JSON log lines on stdout (`docker logs`),
 // a public /health for uptime checks, a password-protected /stats page, /client-error
-// for browser exceptions and /solo for solo games (they run in the browser). Everything is
-// in memory except the optional game history file.
+// for browser exceptions and /solo for solo games (they run in the browser). It also counts page
+// loads that came through a tracked link (`/?ref=yt` from the YouTube Shorts). Everything is in
+// memory except the optional game history and visit files.
 
 /** Finished or abandoned games are appended here as JSON lines when set (a mounted volume). */
 const STATS_FILE = process.env.STATS_FILE;
 /** Password for /stats (HTTP basic auth, any user name). Without it the page is off. */
 const STATS_TOKEN = process.env.STATS_TOKEN;
+/** Page loads with `?ref=...` as JSON lines `{ t, ref }`; by default next to the game history. */
+const VISITS_FILE = process.env.VISITS_FILE ?? (STATS_FILE ? path.join(path.dirname(STATS_FILE), 'visits.jsonl') : undefined);
 
 const ERROR_LIMIT_PER_MIN = 10;
 const ERROR_BODY_MAX = 4096;
@@ -23,6 +27,10 @@ const SOLO_BODY_MAX = 1024;
 const SOLO_MAX = 200;
 /** A solo game reports every wave; silence this long means the tab is gone. */
 const SOLO_IDLE_MS = 20 * 60_000;
+/** Accepted `ref` values: short link tags like `yt`, nothing that could carry personal data. */
+const REF_PATTERN = /^[a-z0-9_-]{1,20}$/;
+/** Visitors remembered per day for deduplication; beyond this, further visits that day are not counted. */
+const REF_SEEN_MAX = 20_000;
 
 export function log(event: string, fields: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ t: new Date().toISOString(), event, ...fields }));
@@ -85,6 +93,11 @@ const soloGames = new Map<string, SoloInfo>();
 type Budget = Map<string, { count: number; resetAt: number }>;
 const errorBudget: Budget = new Map();
 const soloBudget: Budget = new Map();
+/** Visits per "day ref" since the start, for /stats without a visit file. */
+const refVisits = new Map<string, number>();
+/** Address + ref already counted today (addresses are kept in memory only, never written). */
+const refSeen = new Set<string>();
+let refSeenDay = '';
 
 function pushRecent<T>(list: T[], item: T): void {
   list.unshift(item);
@@ -311,6 +324,51 @@ function soloReport(req: IncomingMessage, res: ServerResponse): void {
   });
 }
 
+/**
+ * A page load of `/?ref=...` (the links under the YouTube Shorts carry `ref=yt`). Counted once
+ * per address, ref and day, so reloads and returning to the tab don't inflate the numbers.
+ */
+function countRef(req: IncomingMessage): void {
+  const ref = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('ref');
+  if (!ref || !REF_PATTERN.test(ref)) return;
+  const t = new Date().toISOString();
+  const day = t.slice(0, 10);
+  if (day !== refSeenDay) {
+    refSeen.clear();
+    refSeenDay = day;
+  }
+  const key = `${clientIp(req)} ${ref}`;
+  if (refSeen.has(key) || refSeen.size >= REF_SEEN_MAX) return;
+  refSeen.add(key);
+  refVisits.set(`${day} ${ref}`, (refVisits.get(`${day} ${ref}`) ?? 0) + 1);
+  log('visit.ref', { ref });
+  if (VISITS_FILE) {
+    fs.appendFile(VISITS_FILE, JSON.stringify({ t, ref }) + '\n', (err) => err && log('visits.write-failed', { error: err.message }));
+  }
+}
+
+/** Visits per day and ref, newest first: from the visit file when there is one. */
+function visitsByDay(): [string, string, number][] {
+  let counts = refVisits;
+  if (VISITS_FILE) {
+    try {
+      counts = new Map();
+      for (const line of fs.readFileSync(VISITS_FILE, 'utf8').split('\n')) {
+        if (!line) continue;
+        const v = JSON.parse(line) as { t: string; ref: string };
+        const key = `${v.t.slice(0, 10)} ${v.ref}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    } catch {
+      counts = refVisits;
+    }
+  }
+  return [...counts]
+    .map(([key, n]): [string, string, number] => [key.split(' ')[0]!, key.split(' ')[1]!, n])
+    .sort((a, b) => b[0].localeCompare(a[0]) || b[2] - a[2])
+    .slice(0, 60);
+}
+
 function authorized(req: IncomingMessage): boolean {
   if (!STATS_TOKEN) return false;
   const header = req.headers.authorization ?? '';
@@ -377,6 +435,7 @@ th{background:#1c1c58}td{font-variant-numeric:tabular-nums}.none{color:#888}
 <h2>Solo games now</h2>${table(['game', 'mode', 'bots', 'builders', 'wave', 'min', 'last report'], [...soloGames].map(([id, g]) => [id, g.mode, g.bots, g.builders.join(', '), g.wave, Math.round(g.timeMs / 6000) / 10, `${Math.round((Date.now() - g.lastSeen) / 1000)} s ago`]))}
 <h2>Recent games</h2>${table(['time (UTC)', 'mode', 'humans', 'bots', 'builders', 'wave', 'winner', 'min'], games.map((g) => [g.t.slice(0, 16).replace('T', ' '), g.solo ? `solo ${g.mode}` : g.mode, g.humans, g.bots, g.builders.join(', '), g.wave, g.abandoned ? 'abandoned' : g.winner ?? 'draw', g.minutes]))}
 <h2>Games per day</h2>${table(['day', 'games'], [...days].sort().reverse().slice(0, 30))}
+<h2>Visits from links (?ref) per day</h2>${table(['day (UTC)', 'ref', 'visitors'], visitsByDay())}
 <h2>Builder picks</h2>${table(['builder', 'picks'], [...picks].sort((a, b) => b[1] - a[1]))}
 <h2>Recent client errors</h2>${table(['time (UTC)', 'message', 'source', 'browser', 'stack'], recentErrors.map((e) => [e.t.slice(0, 19).replace('T', ' '), e.message, e.source, e.ua, e.stack]))}
 </body></html>`;
@@ -388,6 +447,8 @@ th{background:#1c1c58}td{font-variant-numeric:tabular-nums}.none{color:#888}
 export function monitorRoutes() {
   return (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
     const url = (req.url ?? '/').split('?')[0];
+    // Counted on the way through; the page itself is served further down.
+    if (url === '/' && req.method === 'GET') countRef(req);
     if (url === '/health' && req.method === 'GET') return health(res);
     if (url === '/stats' && req.method === 'GET') return stats(req, res);
     if (url === '/client-error' && req.method === 'POST') return clientError(req, res);

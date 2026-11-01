@@ -71,7 +71,19 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 
 **Ende eines Clips:** groß über dem Feld „HELD!“ (grün) oder „N LEAKED!“ (rot) – die Antwort auf die Frage im Hook. Die Lane gilt als frei, wenn dort keine Creeps/Sends mehr sind und keine mehr spawnen (`Game.laneHasAttackers`).
 
-**Erster Vorrat (01.11.2026):** 7 Clips in `media/clips/`, Zeitplan-Vorschlag in `tools/shorts/schedule.json` (3.–9.11., 17:30). Wird erst mit dem Commit des Owners freigegeben.
+**Erster Vorrat (01.11.2026):** 7 Clips, vom Owner freigegeben (`tools/shorts/schedule.json`) und per Chrome mit „Planen“ hochgeladen:
+
+| Termin (17:30, GMT+1) | Titel | Video | Playlist |
+|---|---|---|---|
+| 03.11. | Can this build beat the first boss? | [EBBypkUOTyY](https://youtube.com/shorts/EBBypkUOTyY) | Boss moments |
+| 04.11. | Will Frost hold the boss? | [MS5itYsEWwY](https://youtube.com/shorts/MS5itYsEWwY) | Boss moments |
+| 05.11. | Three wave 20 bosses vs. Warclan | [8kySJCc3Fd4](https://youtube.com/shorts/8kySJCc3Fd4) | Boss moments |
+| 06.11. | Watch the whole wave melt | [FPFfnJB2uxA](https://youtube.com/shorts/FPFfnJB2uxA) | Satisfying |
+| 07.11. | Can Tidal stop the boss? | [mcVy7mjTcd8](https://youtube.com/shorts/mcVy7mjTcd8) | Boss moments |
+| 08.11. | Can Canopy survive wave 20? | [UPaNG_6AAU4](https://youtube.com/shorts/UPaNG_6AAU4) | Boss moments |
+| 09.11. | Clockwork vs. the first boss | [5m1iAheCQZM](https://youtube.com/shorts/5m1iAheCQZM) | Boss moments |
+
+Upload per Chrome: Das Upload-Werkzeug der Erweiterung nimmt nur Dateien bis 10 MB. Größere Clips zieht der Owner in den Upload-Dialog von YouTube Studio, Claude füllt danach die Entwürfe aus (Titel, Text, Tags, Playlist, „nicht für Kinder“, Termin).
 
 ### b) Aufnahme im Browser – gebaut (`client/src/showcase/recorder.ts`)
 
@@ -112,6 +124,6 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 
 1. ~~Kanal anlegen und einrichten~~ (erledigt bis auf Upload-Vorlage, Playlists und Verifizierung).
 2. Showcase-Modus + Hochformat (erste Version gebaut).
-3. Aufnahme im Browser (gebaut), `?ref=yt`-Zählung (offen).
-4. Puffer von ~7 Clips aufnehmen, Owner sichtet.
+3. Aufnahme im Browser (gebaut), `?ref=yt`-Zählung (gebaut, `server/src/monitor.ts`, `/stats`).
+4. ~~Puffer von ~7 Clips aufnehmen, Owner sichtet~~ (erledigt, geplant 3.–9.11.).
 5. Täglich hochladen (mit Freigabe), wöchentlich auswerten.
