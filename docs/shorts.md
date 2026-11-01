@@ -4,7 +4,7 @@ Ziel: mit kurzen Gameplay-Clips möglichst viele Leute auf https://legion.schlei
 
 ## Stand (01.11.2026) und nächste Schritte
 
-- Kanal eingerichtet, Showcase-Modus + Aufnahme gebaut, erste Woche (7 Shorts, 3.–9.11., je 17:30) geplant hochgeladen – Liste unten unter „Erster Vorrat“.
+- Kanal eingerichtet, Showcase-Modus + Aufnahme gebaut, Trailer-Short (01.11., 19:00) und erste Woche (7 Shorts, 3.–9.11., je 17:30) geplant hochgeladen – Liste unten unter „Erster Vorrat“.
 - `?ref=yt`-Zählung ist gebaut (`/stats`, `visits.jsonl`); der Owner deployt sie am 01.11. per `npm run deploy`. Prüfen: nach dem Deploy `https://legion.schleiweb.de/?ref=yt` öffnen, dann erscheint auf `/stats` eine Zeile unter „Visits from links“.
 - Als Nächstes:
   1. Bis ~08.11.: zweite Woche (10.–16.11.) vorbereiten – Seeds mit `scout.ts` suchen, Clips aufnehmen, Einträge an `tools/shorts/schedule.json` anhängen; der Owner committet (= Freigabe), dann hochladen wie in Abschnitt 5. Mehr Abwechslung: Fails/Leaks, Welle 30, Chimera, Devlog.
@@ -89,6 +89,7 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 
 | Termin (17:30, GMT+1) | Titel | Video | Playlist |
 |---|---|---|---|
+| 01.11. 19:00 | Legion Pixel – free tower defense in your browser (Trailer, Grove Welle 27) | [7QaJUATmbB0](https://youtube.com/shorts/7QaJUATmbB0) | – |
 | 03.11. | Can this build beat the first boss? | [EBBypkUOTyY](https://youtube.com/shorts/EBBypkUOTyY) | Boss moments |
 | 04.11. | Will Frost hold the boss? | [MS5itYsEWwY](https://youtube.com/shorts/MS5itYsEWwY) | Boss moments |
 | 05.11. | Three wave 20 bosses vs. Warclan | [8kySJCc3Fd4](https://youtube.com/shorts/8kySJCc3Fd4) | Boss moments |
