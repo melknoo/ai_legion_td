@@ -4,7 +4,8 @@ import type { ChatLog } from '../net/ChatLog.ts';
 import { ChatBox } from '../ui/ChatBox.ts';
 import { FIELD_H, FIELD_TOP, SHOWCASE, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
-import { Hud, type HudActions, type HudState, type HudView } from '../ui/Hud.ts';
+import { Hud, type HudActions, type HudState } from '../ui/Hud.ts';
+import { Minimap, type MinimapLink } from '../ui/Minimap.ts';
 import { MiniButton } from '../ui/SlotButton.ts';
 import { TextButton } from '../ui/TextButton.ts';
 import { howToPlay } from '../ui/howToPlay.ts';
@@ -15,11 +16,14 @@ import { Tutorial } from '../ui/Tutorial.ts';
 import { typeChart } from '../ui/typeChart.ts';
 import { FONT } from './BootScene.ts';
 
+/** Right edge of the options and chat buttons in the top bar (the "MY/FOE" king labels start at 252). */
+const TOP_BUTTONS_RIGHT = 246;
+
 /** What the battlefield scene hands to the HUD. */
 export interface UiLink {
   game: GameView;
   player: number;
-  views: HudView[];
+  minimap: MinimapLink;
   actions: HudActions;
   state(): HudState;
   /** Online games only. */
@@ -32,9 +36,9 @@ export interface UiLink {
  */
 export class UiScene extends Phaser.Scene {
   private hud!: Hud;
+  private minimap!: Minimap;
   private tutorial!: Tutorial;
   private link!: UiLink;
-  private fieldLabel!: Phaser.GameObjects.BitmapText;
   private message: Phaser.GameObjects.Container | null = null;
   private summary: Phaser.GameObjects.Container | null = null;
   private chart: Phaser.GameObjects.Container | null = null;
@@ -56,19 +60,20 @@ export class UiScene extends Phaser.Scene {
     this.chart = null;
     this.closeOptions = null;
     this.closeHelp = null;
-    this.hud = new Hud(this, link.game, link.player, link.views, link.actions);
+    this.hud = new Hud(this, link.game, link.player, link.actions);
+    this.minimap = new Minimap(this, link.game, link.player, link.minimap);
     this.tutorial = new Tutorial(this, link.game, link.player);
-    this.fieldLabel = this.add.bitmapText(6, FIELD_TOP + 3, FONT, '');
-    // Options in the top right corner of the battlefield (O).
+    // Options (O) and chat in the top bar, left of the king bars; the field's right margin holds the minimap.
     const size = TOUCH ? 16 : 13;
-    new MiniButton(this, { x: VIEW_W - size - 3, y: FIELD_TOP + 3, size, touchPad: 2, text: 'O', onClick: () => this.toggleOptions(), onHover: () => {} });
+    const y = 1 + Math.floor((23 - size) / 2);
+    new MiniButton(this, { x: TOP_BUTTONS_RIGHT - size, y, size, touchPad: 2, text: 'O', onClick: () => this.toggleOptions(), onHover: () => {} });
     // Chat over the bottom left of the field (Enter: team, Shift+Enter: all), with a button for touch.
     this.chatBox = link.chat
       ? new ChatBox(this, link.chat, { x: 6, bottom: FIELD_TOP + FIELD_H - 1, cols: 56, rows: 6, inGame: true, team: () => link.game.players[link.player]!.team, depth: 19400 })
       : null;
     if (this.chatBox) {
       const box = this.chatBox;
-      new MiniButton(this, { x: VIEW_W - 2 * (size + 3), y: FIELD_TOP + 3, size, touchPad: 2, text: 'C', onClick: () => box.toggle(), onHover: () => {} });
+      new MiniButton(this, { x: TOP_BUTTONS_RIGHT - 2 * size - 3, y, size, touchPad: 2, text: 'C', onClick: () => box.toggle(), onHover: () => {} });
     }
     // Who you are and what to do; the tips start once it is closed.
     this.intro = new IntroCard(this, link.game, link.player, () => this.openHelp());
@@ -76,6 +81,7 @@ export class UiScene extends Phaser.Scene {
 
   override update(): void {
     this.hud.update(this.link.state());
+    this.minimap.update();
     this.intro.update();
     if (!this.intro.open && !this.closeHelp) this.tutorial.update();
     this.chatBox?.update();
@@ -96,10 +102,6 @@ export class UiScene extends Phaser.Scene {
       this.time.delayedCall(0, () => (this.closeHelp = null));
     });
     this.closeHelp = close;
-  }
-
-  setFieldLabel(text: string, color: number): void {
-    this.fieldLabel?.setText(text).setTint(color);
   }
 
   /** FF6 message window over the battlefield; `holdMs` = 0 keeps it open. Returns its bottom edge. */

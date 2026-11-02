@@ -19,6 +19,7 @@ import { builderPortrait } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import { serverUrl } from '../net/server.ts';
 import { ChatLog } from '../net/ChatLog.ts';
+import { clearRejoin, rejoinToken, saveRejoin } from '../net/rejoin.ts';
 import { NetSession } from '../session/NetSession.ts';
 import { ChatBox } from '../ui/ChatBox.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
@@ -211,7 +212,7 @@ export class LobbyScene extends Phaser.Scene {
     const options: JoinOptions = { name: this.entry.name, fast: new URLSearchParams(location.search).has('fast'), private: this.entry.private, title: this.entry.title };
     const client = new Client(serverUrl());
     try {
-      this.room = this.entry.join ? await client.joinById(this.entry.join, options) : await client.create(ROOM_NAME, options);
+      this.room = (await this.rejoin(client)) ?? (this.entry.join ? await client.joinById(this.entry.join, options) : await client.create(ROOM_NAME, options));
     } catch (e) {
       console.error(e);
       // The server's own reason when it turns us away (full, too many connections).
@@ -220,6 +221,9 @@ export class LobbyScene extends Phaser.Scene {
       return;
     }
     history.replaceState(null, '', `${location.pathname}?room=${this.room.roomId}`);
+    const room = this.room;
+    saveRejoin(room.reconnectionToken);
+    room.onReconnect(() => saveRejoin(room.reconnectionToken));
     this.unbindErr = this.room.onMessage('err', (msg: string) => this.showError(msg));
     this.chat = new ChatLog(this.room);
     // The heading doubles as the way to open the chat on touch screens.
@@ -229,6 +233,20 @@ export class LobbyScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.chatBox?.toggle());
     this.chatBox = new ChatBox(this, this.chat, { x: 240, bottom: 224, cols: 28, rows: 4, inGame: false, team: () => (this.mySlot()?.team ?? 0) as TeamId, blocked: () => !!this.nameInput });
+  }
+
+  /** After a reload: take the old seat back if this tab was in the room (a running game goes straight on). */
+  private async rejoin(client: Client): Promise<Room | null> {
+    const token = this.entry.join ? rejoinToken(this.entry.join) : null;
+    if (!token) return null;
+    this.status.setText('REJOINING...');
+    try {
+      return await client.reconnect(token);
+    } catch {
+      // Seat gone (lobby left, 60 s passed, game over): join like anyone else.
+      clearRejoin();
+      return null;
+    }
   }
 
   private showError(msg: string): void {
@@ -314,6 +332,7 @@ export class LobbyScene extends Phaser.Scene {
   private leave(): void {
     void this.room?.leave();
     this.room = null;
+    clearRejoin();
     history.replaceState(null, '', location.pathname);
     this.scene.start('title');
   }

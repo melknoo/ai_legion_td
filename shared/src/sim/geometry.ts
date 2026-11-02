@@ -5,21 +5,21 @@ export const CELL = 64;
 
 export const LANE = {
   width: 1600,
-  height: 384,
+  height: 576,
   spawnMinX: 32,
   spawnMaxX: 160,
   gridX: 832,
   gridCols: 10,
-  gridRows: 6,
+  gridRows: 9,
   leakX: 1568,
 } as const;
 
 export const ARENA = {
   width: 960,
-  height: 384,
+  height: 576,
   entryX: 32,
   kingX: 800,
-  kingY: 192,
+  kingY: 288,
 } as const;
 
 export function cellCenter(col: number, row: number): { x: number; y: number } {

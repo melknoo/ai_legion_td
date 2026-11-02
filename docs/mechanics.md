@@ -74,7 +74,7 @@ Fürs MVP werden 3–4 Builder komplett umgesetzt. Die übrigen Rassen kommen in
   - Ist die eigene Lane leer, laufen die Kämpfer zum Lane-Ende und werden zum King gewarpt, um ihn zu verteidigen.
   - Hat eine Lane keine Kämpfer mehr, laufen ihre Creeps direkt zum King.
 - **Verkaufen:** 100 %, wenn der Kämpfer in dieser Build-Phase gebaut wurde, sonst 50 % des investierten Golds.
-- **Arena** nach Welle 10 und 20: Die Armeen beider Teams kämpfen gegeneinander, das Siegerteam bekommt `Welle·10` Gold pro Spieler. Kein Einfluss auf King-HP. *(Später, nicht im MVP.)*
+- **Arena** nach Welle 10 und 20: Nach dem Boss gibt es erst eine 30-s-Bauphase („ARENA 30s“, Bauen und Upgraden wie sonst), dann kämpfen die Armeen beider Teams gegeneinander, das Siegerteam bekommt `Welle·10` Gold pro Spieler. Kein Einfluss auf King-HP. Danach die normale Bauphase vor Welle 11 bzw. 21. Sends, die vor der Arena gekauft wurden, kommen wie gewohnt mit der nächsten Welle (im Original kämpfen sie in der Arena mit).
 - **Welle 31 (Finale):** endlose „Legion Lords“, das Intervall schrumpft, bis ein King fällt.
 - **Sieg:** Einzige Bedingung ist der Tod des gegnerischen Kings.
 

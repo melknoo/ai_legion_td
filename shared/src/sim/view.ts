@@ -13,6 +13,8 @@ export interface GameView {
   readonly wave: number;
   readonly timeMs: number;
   readonly phaseEndsAtMs: number;
+  /** This build phase ends in the arena battle instead of a wave. */
+  readonly arenaNext: boolean;
   readonly winner: TeamId | null;
   readonly kingLevels: Record<TeamId, Record<KingStat, number>>;
   def(unit: UnitState): UnitDef;

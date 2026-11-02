@@ -69,6 +69,7 @@ export function testData(overrides: Partial<GameData> = {}): GameData {
       farms: [{ gold: 10, lumber: 10, food: 8 }],
       arenaWaves: [],
       arenaGoldPerWave: 10,
+      arenaBuildMs: 3000,
       arenaMaxMs: 60000,
       prophet: { rerolls: 2, rerollCost: 10 },
       king: {

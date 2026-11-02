@@ -176,6 +176,7 @@ function buildData(): GameData {
       ],
       arenaWaves: [10, 20],
       arenaGoldPerWave: 10,
+      arenaBuildMs: 30_000,
       arenaMaxMs: 90_000,
       prophet: { rerolls: 7, rerollCost: 40 },
       king: {

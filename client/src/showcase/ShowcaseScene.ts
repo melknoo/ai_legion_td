@@ -4,8 +4,8 @@ import { CANVAS_W } from '../layout.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ClipRecorder } from './recorder.ts';
 
-/** Battlefield band of the 1080x1920 showcase canvas (canvas px): one lane at 8x, captions above and below. */
-export const SHOWCASE_FIELD = { top: 560, height: 832, zoom: 8, buildSpeed: 6 } as const;
+/** Battlefield band of the 1080x1920 showcase canvas (canvas px): the full lane height at 6x, captions above and below. */
+export const SHOWCASE_FIELD = { top: 560, height: 960, zoom: 6, buildSpeed: 6 } as const;
 /** Captions are laid out at 540x960 and drawn 2x, like the HUD. */
 const CAPTION_ZOOM = 2;
 const W = CANVAS_W / CAPTION_ZOOM;

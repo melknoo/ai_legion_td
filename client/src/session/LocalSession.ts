@@ -72,7 +72,7 @@ export class LocalSession implements Session {
   /** Plays ahead without rendering until the build phase of `wave` (or the end of the game). */
   skipToWave(wave: number): void {
     const g = this.game;
-    for (let i = 0; i < 400_000 && g.phase !== 'over' && !(g.wave >= wave && g.phase === 'build'); i++) this.step();
+    for (let i = 0; i < 400_000 && g.phase !== 'over' && !(g.wave >= wave && g.phase === 'build' && !g.arenaNext); i++) this.step();
   }
 
   private step(): GameEvent[] {

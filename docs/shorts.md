@@ -73,7 +73,7 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 | `rec` | nimmt den ersten Kampf auf, bis die gezeigte Lane frei ist, + 1,5 s Nachlauf (max. 58 s), und speichert `media/clips/legion-s<seed>-w<welle>-l<lane>-<builder>.webm` (außerhalb des Dev-Servers: Download) |
 | `from=N`, `len=N` | Aufnahme erst N s nach Kampfbeginn starten (wenn die Lane voll ist); mit `len` läuft der Clip fest N s (endet nur früher, wenn die Welle endet), ohne HELD/LEAKED-Einblendung – für Trailer |
 
-- Canvas 1080x1920, keine HUD (UiScene läuft unsichtbar weiter), Spielfeld 8x gezoomt in der Mitte (`SHOWCASE_FIELD` in `client/src/showcase/ShowcaseScene.ts`), darunter Welle + Builder und `LEGION.SCHLEIWEB.DE`. Die Texte sind auf 540x960 angeordnet und werden 2x gezeichnet.
+- Canvas 1080x1920, keine HUD (UiScene läuft unsichtbar weiter), Spielfeld 6x gezoomt in der Mitte (volle Lane-Höhe) (`SHOWCASE_FIELD` in `client/src/showcase/ShowcaseScene.ts`), darunter Welle + Builder und `LEGION.SCHLEIWEB.DE`. Die Texte sind auf 540x960 angeordnet und werden 2x gezeichnet.
 - Kamera: in der Bauphase auf die Armee, im Kampf auf den Boss (falls einer da ist), sonst auf die kämpfenden Einheiten.
 - Spieler 0 spielt per `botCommands` (`LocalSession` mit `autopilot`), Bauphasen laufen 6x schneller.
 - Showcase-Spiele gehen nicht in die `/solo`-Statistik.

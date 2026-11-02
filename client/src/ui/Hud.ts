@@ -4,7 +4,7 @@ import { DIR, UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifes
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window, panelTexture } from './ff6Window.ts';
 import { RichLine, richText, type Segment } from './RichLine.ts';
-import { MiniButton, SlotButton, TabButton } from './SlotButton.ts';
+import { MiniButton, SlotButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
 import { SLOT_KEYS } from './keys.ts';
 import { teamColor } from './playerColors.ts';
@@ -26,15 +26,6 @@ export interface HudState {
   hoverUnit: number | null;
   slotMode: SlotMode;
   sendPage: number;
-  viewArea: number;
-}
-
-export interface HudView {
-  /** Areas this tab shows; clicking again steps through them. */
-  areas: number[];
-  label: string;
-  /** King views flash their tab when that king takes damage. */
-  kingTeam?: TeamId;
 }
 
 export interface HudActions {
@@ -48,7 +39,6 @@ export interface HudActions {
   buyWorker(): void;
   upgradeFarm(): void;
   upgradeKing(stat: KingStat): void;
-  selectView(index: number): void;
 }
 
 const KING_BUTTONS: { stat: KingStat; icon: string; key: string; title: string }[] = [
@@ -93,9 +83,7 @@ const RES_POP = { gold: { x: 356, tint: 0xffe040 }, lumber: { x: 418, tint: 0x90
 export class Hud {
   private hover: Hover | null = null;
   private readonly topText: Phaser.GameObjects.BitmapText;
-  private readonly tabs: TabButton[];
   private readonly kingBars: Phaser.GameObjects.Graphics;
-  private readonly lastKingHp: Record<TeamId, number> = { 0: Infinity, 1: Infinity };
   /** Creeps and sends still alive on each team's side, next to its king bar. */
   private readonly alive: Phaser.GameObjects.BitmapText[];
   private readonly slots: SlotButton[];
@@ -141,7 +129,6 @@ export class Hud {
     private readonly scene: Phaser.Scene,
     private readonly game: GameView,
     private readonly player: number,
-    private readonly views: HudView[],
     private readonly act: HudActions,
   ) {
     const hoverFn = (h: Hover) => (over: boolean) => {
@@ -152,7 +139,6 @@ export class Hud {
     // Top bar (y 1..24); the battlefield viewport sits below it.
     ff6Window(scene, 2, 1, 476, 23);
     this.topText = scene.add.bitmapText(8, 4, FONT, '').setLineSpacing(2);
-    this.tabs = views.map((v, i) => new TabButton(scene, 84 + i * 41, 2, 39, 21, v.label, () => act.selectView(i)));
     const myTeam = game.players[player]!.team;
     scene.add.bitmapText(252, 4, FONT, 'MY').setTint(teamColor(myTeam));
     scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(teamColor(myTeam === 0 ? 1 : 0));
@@ -275,7 +261,7 @@ export class Hud {
   update(s: HudState): void {
     const g = this.game;
     const me = g.players[this.player]!;
-    this.drawTop(s);
+    this.drawTop();
 
     // Slots: fighters for gold (placeable between waves, browsable during one), or sends for lumber.
     const send = s.slotMode === 'send';
@@ -422,14 +408,12 @@ export class Hud {
     if (h?.on === 'slot') {
       if (s.slotMode === 'send') {
         const merc = Object.values(g.data.mercs)[s.sendPage * SEND_PAGE_SIZE + h.index];
-        // Build-phase sends join the coming wave, sends during a wave the one after.
-        const joins = g.phase === 'build' ? g.wave : g.wave + 1;
-        if (merc) return this.showUnit(merc.unit, `SEND {log}${merc.lumberCost}`, 'attacker', `+${merc.incomeGain} INCOME\nJOINS WAVE ${joins}`);
+        if (merc) return this.showUnit(merc.unit, `SEND {log}${merc.lumberCost}`, 'attacker', `+${merc.incomeGain} INCOME`);
       } else if (h.index === REROLL_SLOT && g.data.builders[me.builder]?.random) {
         const left = r.prophet.rerolls - me.rerolls;
         const cost = rerollCost(g.data, me);
         const price = left > 0 ? `{coin}${cost} {log}${cost}` : 'NONE LEFT';
-        return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `REROLLS ALL SIX\n${left}/${r.prophet.rerolls} LEFT`);
+        return this.showText(facesetKey(builderPortrait(g.data.builders[me.builder]!)), 'NEW FIGHTERS', `${SLOT_KEYS[REROLL_SLOT]}: ${price}`, `${left}/${r.prophet.rerolls} LEFT`);
       } else {
         const id = me.fighters[h.index];
         const how = g.phase === 'build' ? '' : 'BUILD AFTER WAVE';
@@ -437,30 +421,29 @@ export class Hud {
       }
     }
     if (h?.on === 'mode') {
-      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', '1/2: SWITCH', 'FIGHTERS FOR {coin}GOLD\nPLACED BETWEEN WAVES');
-      return this.showText('icon-log', 'SEND', '1/2: SWITCH', 'UNITS FOR {log}LUMBER\nJOIN THE FOE WAVE\nAND RAISE INCOME');
+      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', TOUCH ? '' : 'KEY 1', 'FIGHTERS FOR {coin}GOLD');
+      return this.showText('icon-log', 'SEND', TOUCH ? '' : 'KEY 2', 'HITS FOE, +INCOME');
     }
     if (h?.on === 'page') {
       const pages = Math.ceil(Object.keys(g.data.mercs).length / SEND_PAGE_SIZE);
-      return this.showText('icon-log', 'MORE SENDS', `PAGE ${s.sendPage + 1}/${pages}`, '2 OR N: NEXT PAGE');
+      return this.showText('icon-log', 'MORE SENDS', `PAGE ${s.sendPage + 1}/${pages}`, TOUCH ? '' : 'N: NEXT PAGE');
     }
     if (h?.on === 'chart') {
-      return this.showText(ARMOR_ICON, 'DAMAGE TYPES', 'T: OPEN CHART', 'ATTACK TYPE VS\nARMOR TYPE DECIDES\nHOW HARD A HIT IS');
+      return this.showText(ARMOR_ICON, 'DAMAGE TYPES', TOUCH ? '' : 'T: OPEN CHART', 'ATTACK VS ARMOR');
     }
     if (h?.on === 'worker') {
-      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `{coin}${r.workerCost}`, `GATHERS {log}${r.lumberPerWorker} LUMBER\nEVERY ${r.lumberIntervalMs / 1000}S`);
+      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `{coin}${r.workerCost}`, `{log}${r.lumberPerWorker} EVERY ${r.lumberIntervalMs / 1000}S`);
     }
     if (h?.on === 'farm') {
       const farm = r.farms[me.farmLevel];
-      const food = `SUPPLY {food}${g.foodUsed(this.player)}/${me.foodCap}`;
-      if (!farm) return this.showText('btn-farm', 'FARM', 'MAXED', food);
-      return this.showText('btn-farm', 'FARM', `{coin}${farm.gold} {log}${farm.lumber}`, `LV ${me.farmLevel}/${r.farms.length}\n+{food}${farm.food} SUPPLY\n${food}`);
+      if (!farm) return this.showText('btn-farm', 'FARM', 'MAXED', '');
+      return this.showText('btn-farm', `FARM LV ${me.farmLevel}/${r.farms.length}`, `{coin}${farm.gold} {log}${farm.lumber}`, `+{food}${farm.food} SUPPLY`);
     }
     if (h?.on === 'king') {
       const k = KING_BUTTONS.find((b) => b.stat === h.stat)!;
       const lvl = g.kingLevels[me.team][h.stat];
-      const gain = h.stat === 'hp' ? `+${r.king.hpBase + r.king.hpStep * (lvl + 1)} MAX HP` : h.stat === 'attack' ? `+${r.king.attackStep} DAMAGE` : `+${r.king.regenStep} HP/SEC`;
-      return this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(h.stat)}  {log}${r.king.upgradeLumber}`, `${gain}\n+${r.king.upgradeIncome} INCOME`);
+      const gain = h.stat === 'hp' ? `+${r.king.hpBase + r.king.hpStep * (lvl + 1)} HP` : h.stat === 'attack' ? `+${r.king.attackStep} DMG` : `+${r.king.regenStep} REGEN`;
+      return this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(h.stat)}  {log}${r.king.upgradeLumber}`, `${gain} +${r.king.upgradeIncome} INC`);
     }
     if (h?.on === 'action' && selected) {
       const t = this.actionTargets[h.index];
@@ -475,8 +458,7 @@ export class Hud {
     if (live) return this.showLive(live);
     // Idle: preview the wave that is coming (or running).
     if (!g.data.waves[g.wave - 1]) {
-      const help = TOUCH ? 'TAP SLOT, TAP GRID\nTWICE TO BUILD\nHOLD BUTTON: INFO\nSWIPE: MOVE VIEW' : 'QWER ASDF YXCV\n1 BUILD  2 SEND\nT: DAMAGE CHART\nCLICK UNIT: SELECT';
-      return this.showText('icon-hand', 'COMMANDS', '', help);
+      return this.showText('icon-hand', 'COMMANDS', '', TOUCH ? 'TAP UNIT: INFO' : 'CLICK UNIT: INFO');
     }
     this.showWave(g.wave, false);
   }
@@ -490,7 +472,7 @@ export class Hud {
   private showWave(n: number, numbered: boolean): void {
     const g = this.game;
     const wave = g.data.waves[n - 1];
-    if (!wave) return this.showText('icon-hand', 'LAST WAVE', '', 'NO MORE WAVES\nAFTER THIS ONE');
+    if (!wave) return this.showText('icon-hand', 'LAST WAVE', '', '');
     const creep = g.data.units[wave.creep]!;
     const label = numbered ? `W${n}` : g.phase === 'build' ? 'NEXT' : 'NOW';
     const bounty = wave.endless ? 'ENDLESS FINALE!' : creep.boss ? `BOSS! BOUNTY {coin}${creep.bounty}` : `BOUNTY {coin}${creep.bounty}`;
@@ -639,19 +621,16 @@ export class Hud {
 
   // ---- top bar ------------------------------------------------------------------
 
-  private drawTop(s: HudState): void {
+  private drawTop(): void {
     const g = this.game;
     const secs = Math.max(0, Math.ceil((g.phaseEndsAtMs - g.timeMs) / 1000));
-    const phase = g.phase === 'build' ? `BUILD ${secs}s` : g.phase === 'fight' ? 'FIGHT!' : g.phase === 'arena' ? 'ARENA!' : 'GAME OVER';
+    const phase = g.phase === 'build' ? `${g.arenaNext ? 'ARENA' : 'BUILD'} ${secs}s` : g.phase === 'fight' ? 'FIGHT!' : g.phase === 'arena' ? 'ARENA!' : 'GAME OVER';
     this.topText.setText(`WAVE ${g.wave}/${g.data.waves.length}\n${phase}`);
     const myTeam = g.players[this.player]!.team;
     const bars = this.kingBars.clear();
     const attackers = this.attackersAlive();
     ([myTeam, myTeam === 0 ? 1 : 0] as const).forEach((team, row) => {
       const k = g.king(team);
-      // A king losing HP makes its view tab blink.
-      if (k.hp < this.lastKingHp[team]) this.tabs.forEach((t, i) => this.views[i]!.kingTeam === team && t.flash());
-      this.lastKingHp[team] = k.hp;
       const { x, w } = KING_BAR;
       const y = 6 + row * 10;
       bars.fillStyle(0x000000, 0.7).fillRect(x, y, w, 5);
@@ -660,7 +639,6 @@ export class Hud {
       const n = attackers[team];
       this.alive[row]!.setText(g.phase === 'build' ? '' : `${n}`).setTint(n ? 0xffffff : 0x80ff90);
     });
-    this.tabs.forEach((t, i) => t.setActive(this.views[i]!.areas.includes(s.viewArea)));
     this.drawWaveButton();
   }
 

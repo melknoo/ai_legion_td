@@ -13,6 +13,8 @@ export interface Session {
   /** Local sessions answer immediately; online sessions report rejections later via onError. */
   send(cmd: PlayerCommand): CommandResult;
   onError?: (message: string) => void;
+  /** Online only: the connection dropped (the SDK retries), came back, or is gone for good. */
+  onConnection?: (status: 'dropped' | 'back' | 'lost') => void;
   /** Online only: the room's chat, carried over from the lobby. */
   readonly chat?: ChatLog;
 }

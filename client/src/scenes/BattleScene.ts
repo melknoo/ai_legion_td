@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
-import { ARENA, CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
+import { CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey, type SoundKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM as HUD_FIELD_ZOOM, SCALE, SHOWCASE, UI_ZOOM, VIEW_W } from '../layout.ts';
 import { SHOWCASE_FIELD, showcaseParams, type ShowcaseScene } from '../showcase/ShowcaseScene.ts';
 import { ellipseTexture } from '../render/ellipse.ts';
+import { FieldMap, LANE_PX, MAP_GAP, type MapSlot } from '../render/fieldMap.ts';
 import { FX_SOUND, SHOT_SOUND, sfx } from '../audio/sfx.ts';
+import { clearRejoin } from '../net/rejoin.ts';
 import { attackStyle } from '../render/attackStyle.ts';
 import { settings } from '../settings.ts';
 import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
@@ -12,10 +14,10 @@ import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
 import { SoloReport } from '../soloReport.ts';
-import { REROLL_SLOT, SEND_PAGE_SIZE, type HudView, type SlotMode } from '../ui/Hud.ts';
+import { REROLL_SLOT, SEND_PAGE_SIZE, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
-import { ME_COLOR, seatColor, teamColor } from '../ui/playerColors.ts';
+import { ME_COLOR, seatColor } from '../ui/playerColors.ts';
 import { FONT } from './BootScene.ts';
 import type { UiLink, UiScene } from './UiScene.ts';
 
@@ -24,20 +26,35 @@ const AURA_GLOW: Record<AuraStat, number> = { damage: 0xff6040, armor: 0x60a0ff,
 const FIELD_ZOOM = SHOWCASE ? SHOWCASE_FIELD.zoom : HUD_FIELD_ZOOM;
 /** Visible battlefield size in field pixels at the camera zoom. */
 const VIEW_FIELD_W = CANVAS_W / FIELD_ZOOM;
-const LANE_PX = { w: LANE.width * SCALE, h: LANE.height * SCALE };
-const ARENA_PX = { w: ARENA.width * SCALE, h: ARENA.height * SCALE };
-/** Ground drawn beyond the lane edges, and how far the camera sits above centre so the top row's heads and HP bars show. */
-const FIELD_MARGIN = 32;
-const HEADROOM = 3;
+const VIEW_FIELD_H = (SHOWCASE ? SHOWCASE_FIELD.height : FIELD_H * UI_ZOOM) / FIELD_ZOOM;
+/** Ground drawn beyond the map's sides. */
+const FIELD_MARGIN = 48;
+/** The lane is 16 px shorter than the view: all of it goes above, where the top row's heads stick out. */
+const HEADROOM = 8;
+/** Ground above each area, so a centred view shows no dark gap; the rest of MAP_GAP stays dark as a divider. */
+const GROUND_TOP = HEADROOM * 2;
+/** Field labels in HUD-sized pixels (2 canvas px per font pixel); showcase clips keep their look. */
+const LABEL_SCALE = SHOWCASE ? 2 / 3 : UI_ZOOM / FIELD_ZOOM;
 /** Camera pan speed for arrow keys, field px per second. */
 const PAN_SPEED = 220;
 /** A touch that moves this far (canvas px) is a swipe that pans, not a tap. */
 const TOUCH_PAN_PX = 16;
+/** After a drag on the map the view settles on the nearest area once left alone this long. */
+const SNAP_MS = 600;
+/** Mouse wheel travel per step to the next area (one notch is usually 100). */
+const WHEEL_STEP = 100;
+/** Creeps and sends are drawn smaller than the fighters, so a crowded lane stays readable. */
+const ATTACKER_SCALE = 0.75;
 /** Nova effects by ability name, else by the caster's attack type. */
 const NOVA_FX: Record<string, FxKey> = { Torrent: 'waterpillar', Shockwave: 'rockspike', 'Royal Stomp': 'rockspike', 'Plague Cloud': 'magic' };
 const GLOW_FX = new Set<FxKey>(['explosion', 'spark', 'magic', 'boost', 'thunder', 'cut', 'claw', 'clawdouble', 'cutdouble', 'slashcurved', 'spirit', 'holy']);
 /** Pause between two hit flashes on the same unit. */
 const FLASH_GAP_MS = 250;
+/** Hit flash of the local player's own units. */
+const HURT_FLASH = 0xff4040;
+/** Dashed line from the selected/hovered unit to its target, and the ring on the target. */
+const TARGET_COLOR = 0xff6050;
+const TARGET_TINT = 0xff9080;
 /** Moves longer than this per frame are teleports, not walking. */
 const TELEPORT_PX = 20;
 const NOVA_FX_BY_TYPE: Record<AttackType, FxKey> = { normal: 'rockspike', pierce: 'frost', siege: 'explosion', magic: 'magic', chaos: 'flame' };
@@ -84,10 +101,10 @@ export class BattleScene extends Phaser.Scene {
   private views = new Map<number, UnitView>();
   /** When this frame's shots land, by "source:target"; their damage flashes and numbers wait for it. */
   private readonly landing = new Map<string, number>();
-  /** Selectable views: own lane, own king, opponent lane, opponent king. */
-  private viewList: HudView[] = [];
-  /** Area currently shown (a lane index or a king arena). */
-  private viewArea = 0;
+  /** Where every lane and arena sits on the scrollable map. */
+  private map!: FieldMap;
+  /** Areas on screen this frame: only their units are drawn and only their events make effects and sound. */
+  private readonly shown = new Set<number>();
   /** Fighter slot armed for placement; cleared after one placement unless Shift is held. */
   private selectedBuild: number | null = null;
   /** Chosen slot mode for the build phase; a running wave always shows sends. */
@@ -103,13 +120,17 @@ export class BattleScene extends Phaser.Scene {
   /** Camera centre (field px) and until when manual panning overrides the auto camera. */
   private camX = LANE_PX.w - VIEW_FIELD_W / 2;
   private manualCamUntil = 0;
+  private camY = 0;
+  /** Row the camera glides to (an area's middle); null while the player drags the map. */
+  private targetY: number | null = null;
+  private draggedAt = 0;
+  private wheelTravel = 0;
 
-  private laneBg!: Phaser.GameObjects.TileSprite;
-  private arenaBg!: Phaser.GameObjects.TileSprite;
+  /** Ground and (lanes) "TO KING" label of every area, hidden while off screen. Area names are drawn by the minimap. */
+  private grounds: { slot: MapSlot; ground: Phaser.GameObjects.TileSprite; kingMark?: Phaser.GameObjects.BitmapText }[] = [];
   private grid!: Phaser.GameObjects.Graphics;
-  /** "YOU" over the own grid while building, and the leak line's "TO KING" label (lanes only). */
+  /** "YOU" over the own grid while building. */
   private youMark!: Phaser.GameObjects.BitmapText;
-  private kingMark!: Phaser.GameObjects.BitmapText;
   private ghost!: Phaser.GameObjects.Sprite;
   /** Pulsing ring and bobbing arrow on the selected unit. */
   private selRing!: Phaser.GameObjects.Ellipse;
@@ -129,6 +150,12 @@ export class BattleScene extends Phaser.Scene {
     this.session = data?.session ?? this.localSession(this.solo!);
     this.me = this.session.localPlayer;
     this.session.onError = (message) => this.ui.floatText(message.toUpperCase(), 0xff6060);
+    this.session.onConnection = (status) => {
+      if (this.session.game.phase === 'over') return;
+      if (status === 'dropped') this.ui.showBanner(['CONNECTION LOST', 'RECONNECTING...'], 0);
+      else if (status === 'back') this.ui.showBanner(['RECONNECTED!']);
+      else this.ui.showBanner(['DISCONNECTED', 'RELOAD WITHIN 60S TO REJOIN'], 0);
+    };
     this.views.clear();
     this.selectedBuild = null;
     this.selectedUnit = null;
@@ -137,7 +164,7 @@ export class BattleScene extends Phaser.Scene {
   private localSession(config: SoloConfig): Session {
     // Dev aid: `?fast` shortens build phases for quick playtests.
     const data = new URLSearchParams(location.search).has('fast')
-      ? { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0 } }
+      ? { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0, arenaBuildMs: 8000 } }
       : LEGION_DATA;
     if (!SHOWCASE) return new LocalSession(data, config);
     const { seed, wave } = showcaseParams();
@@ -147,16 +174,24 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Ground reaches past the lane edges so the margin the camera shows above/below isn't void.
-    this.laneBg = this.add.tileSprite(0, -FIELD_MARGIN, LANE_PX.w, LANE_PX.h + FIELD_MARGIN * 2, 'grass').setOrigin(0, 0);
-    // The arena is narrower than the view: pave the sides as well.
-    const side = Math.max(0, (VIEW_FIELD_W - ARENA_PX.w) / 2) + FIELD_MARGIN;
-    this.arenaBg = this.add.tileSprite(-side, -FIELD_MARGIN, ARENA_PX.w + side * 2, ARENA_PX.h + FIELD_MARGIN * 2, 'stone').setOrigin(0, 0);
+    const game = this.session.game;
+    this.map = new FieldMap(game, this.me);
+    // Ground reaches past the map's sides so the margin the camera shows isn't void; arenas are paved
+    // as wide as the lanes. Whole 16 px tiles keep the grass in step with the grid. Above each area it
+    // covers the headroom, so only the rest of the gap shows as a dark divider while scrolling.
+    const side = Math.ceil((Math.max(0, (VIEW_FIELD_W - LANE_PX.w) / 2) + FIELD_MARGIN) / 16) * 16;
+    this.grounds = this.map.slots.map((slot) => ({
+      slot,
+      ground: this.add.tileSprite(-side, slot.y - GROUND_TOP, LANE_PX.w + side * 2, slot.h + GROUND_TOP, slot.kind === 'lane' ? 'grass' : 'stone').setOrigin(0, 0),
+      // Halfway down the leak line, under the units.
+      kingMark:
+        slot.kind === 'lane'
+          ? this.add.bitmapText(slot.x + LANE.leakX * SCALE - 2, slot.y + slot.h / 2, FONT, 'TO KING').setOrigin(1, 0.5).setScale(LABEL_SCALE).setTint(0xff9090).setDepth(2)
+          : undefined,
+    }));
     this.grid = this.add.graphics().setDepth(1);
-    // Font pixels at 2/3 scale come out as 2 screen pixels, like the HUD. "YOU" sits in the headroom above the
-    // lane, "TO KING" halfway down the leak line, under the units.
-    this.youMark = this.add.bitmapText(0, -1, FONT, 'YOU').setOrigin(0.5, 1).setScale(2 / 3).setTint(ME_COLOR).setDepth(9001);
-    this.kingMark = this.add.bitmapText(LANE.leakX * SCALE - 2, LANE_PX.h / 2, FONT, 'TO KING').setOrigin(1, 0.5).setScale(2 / 3).setTint(0xff9090).setDepth(2);
+    // "YOU" sits in the headroom above the own grid.
+    this.youMark = this.add.bitmapText(0, 0, FONT, 'YOU').setOrigin(0.5, 1).setScale(LABEL_SCALE).setTint(ME_COLOR).setDepth(9001);
     this.hpBars = this.add.graphics().setDepth(9999);
     // Above the units, under HP bars and hit effects.
     this.trails = new SwingTrails(this, 9990);
@@ -171,22 +206,15 @@ export class BattleScene extends Phaser.Scene {
     cam.setZoom(FIELD_ZOOM).setBackgroundColor('#0b0b18');
     cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.3);
 
-    const game = this.session.game;
-    const me = game.players[this.me]!;
-    const foeTeam: TeamId = me.team === 0 ? 1 : 0;
-    // Lane tabs cycle through every lane of that side, own lane first.
-    const allies = game.players.filter((p) => p.team === me.team && p.index !== me.index).map((p) => p.index);
-    const foes = game.players.filter((p) => p.team === foeTeam).map((p) => p.index);
-    this.viewList = [
-      { areas: [me.index, ...allies], label: 'MY\nLANE' },
-      { areas: [game.arenaOf(me.team)], label: 'MY\nKING', kingTeam: me.team },
-      { areas: foes, label: 'FOE\nLANE' },
-      { areas: [game.arenaOf(foeTeam)], label: 'FOE\nKING', kingTeam: foeTeam },
-    ];
     const link: UiLink = {
       game,
       player: this.me,
-      views: this.viewList,
+      minimap: {
+        map: this.map,
+        view: () => ({ top: this.camY - VIEW_FIELD_H / 2, bottom: this.camY + VIEW_FIELD_H / 2 }),
+        lookAt: (fy) => this.drag(fy - this.camY),
+        wheel: (dy) => this.wheel(dy),
+      },
       actions: {
         pickSlot: (i) => this.slotKey(i),
         setSlotMode: (mode) => this.setSlotMode(mode),
@@ -197,7 +225,6 @@ export class BattleScene extends Phaser.Scene {
         buyWorker: () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'),
         upgradeFarm: () => this.upgradeFarm(),
         upgradeKing: (stat) => this.upgradeKing(stat),
-        selectView: (i) => this.selectView(i),
       },
       chat: this.session.chat,
       state: () => ({
@@ -206,7 +233,6 @@ export class BattleScene extends Phaser.Scene {
         hoverUnit: this.hoverUnit,
         slotMode: this.mode,
         sendPage: this.sendPage,
-        viewArea: this.viewArea,
       }),
     };
     this.scene.launch('ui', link);
@@ -214,7 +240,10 @@ export class BattleScene extends Phaser.Scene {
     if (SHOWCASE) this.scene.launch('showcase', { game: (this.session as LocalSession).game });
 
     this.setupInput();
+    // Start on the own lane (or the clip's) without gliding there from the top of the map.
     this.setView(SHOWCASE ? showcaseParams().lane : this.me);
+    this.camY = this.targetY!;
+    this.updateShown();
 
     // Showcase games are not real games: keep them out of the stats.
     this.soloReport = this.solo && !SHOWCASE ? new SoloReport(this.session.game, this.solo) : null;
@@ -233,11 +262,13 @@ export class BattleScene extends Phaser.Scene {
     this.landing.clear();
     for (const ev of events) this.handleEvent(ev);
     if (!holdClip()) this.updateCamera(delta / 1000);
-    // Units move under a resting mouse, so re-check the hover target every frame. A finger
-    // leaves no resting pointer: there the tap selects.
+    this.updateShown();
+    // Units (and the map) move under a resting mouse, so re-check what it points at every frame.
+    // A finger leaves no resting pointer: there the tap selects.
     const pointer = this.input.activePointer;
     const world = pointer.wasTouch ? null : this.pointerWorld(pointer);
     this.hoverUnit = this.selectedBuild === null && world ? this.unitAt(world.x, world.y) : null;
+    if (!pointer.wasTouch) this.hoverCell = world ? this.cellAt(world.x, world.y) : null;
     if (this.pendingSelect) {
       const placed = this.fighterAt(this.pendingSelect.col, this.pendingSelect.row);
       if (placed) this.selectedUnit = placed.id;
@@ -254,31 +285,82 @@ export class BattleScene extends Phaser.Scene {
 
   // ---- camera ---------------------------------------------------------------
 
-  /** Follows the fighting (or the build grid) unless the player pans manually. */
+  /**
+   * Scrolls the map up and down: glides to a chosen area, or follows a drag and then settles on
+   * the nearest area. Sideways it follows the fighting (or the build grid) unless the player pans
+   * manually; at the normal HUD zoom the whole lane fits and it just sits in the middle.
+   */
   private updateCamera(dt: number): void {
-    const game = this.session.game;
     const cam = this.cameras.main;
-    if (!game.isLane(this.viewArea)) {
-      cam.centerOn(ARENA_PX.w / 2, ARENA_PX.h / 2 - HEADROOM);
-      return;
-    }
+    // A dragged map settles once let go, so no lane stays half off screen.
+    if (this.targetY === null && this.time.now > this.draggedAt + SNAP_MS && !this.input.activePointer.isDown) this.targetY = this.focusY(this.map.nearest(this.camY));
+    if (this.targetY !== null) this.camY = Math.abs(this.targetY - this.camY) < 0.5 ? this.targetY : this.camY + (this.targetY - this.camY) * Math.min(1, dt * 8);
+    const first = this.map.slots[0]!;
+    const last = this.map.slots[this.map.slots.length - 1]!;
+    this.camY = Phaser.Math.Clamp(this.camY, this.focusY(first), this.focusY(last));
     const pan = this.ui.keysCaptured ? 0 : (this.cursors.right.isDown ? 1 : 0) - (this.cursors.left.isDown ? 1 : 0);
     if (pan) {
       this.camX += pan * PAN_SPEED * dt;
       this.manualCamUntil = this.time.now + 3000;
     }
     if (this.time.now > this.manualCamUntil) {
-      const target = this.autoCameraX();
+      const target = this.autoCameraX(this.viewArea);
       this.camX += (target - this.camX) * Math.min(1, dt * 3);
     }
-    this.camX = Phaser.Math.Clamp(this.camX, VIEW_FIELD_W / 2, LANE_PX.w - VIEW_FIELD_W / 2);
-    cam.centerOn(Math.round(this.camX), LANE_PX.h / 2 - HEADROOM);
+    this.camX = LANE_PX.w <= VIEW_FIELD_W ? LANE_PX.w / 2 : Phaser.Math.Clamp(this.camX, VIEW_FIELD_W / 2, LANE_PX.w - VIEW_FIELD_W / 2);
+    cam.centerOn(Math.round(this.camX), Math.round(this.camY));
   }
 
-  private autoCameraX(): number {
+  /** The area in view, or the one the camera is gliding to (a lane index or an arena). */
+  private get viewArea(): number {
+    return this.map.nearest(this.targetY ?? this.camY).area;
+  }
+
+  /** Camera row that shows an area whole, the top row's heads included. */
+  private focusY(slot: MapSlot): number {
+    return slot.y + slot.h / 2 - HEADROOM;
+  }
+
+  /** Moves the map by a drag (touch swipe, minimap); it settles on an area once let go. */
+  private drag(dy: number): void {
+    this.camY += dy;
+    this.targetY = null;
+    this.draggedAt = this.time.now;
+  }
+
+  /** Next (1) or previous (-1) area on the map: wheel, arrow keys, Tab (`wrap`). */
+  private step(dir: number, wrap = false): void {
+    const slots = this.map.slots;
+    const at = slots.indexOf(this.map.slot(this.viewArea)) + dir;
+    const next = wrap ? slots[(at + slots.length) % slots.length] : slots[Phaser.Math.Clamp(at, 0, slots.length - 1)];
+    this.setView(next!.area);
+  }
+
+  /** The wheel steps from area to area; a trackpad's small deltas add up to a step. */
+  private wheel(dy: number): void {
+    this.wheelTravel += dy;
+    if (Math.abs(this.wheelTravel) < WHEEL_STEP) return;
+    this.step(Math.sign(this.wheelTravel));
+    this.wheelTravel = 0;
+  }
+
+  /** Shows the units, ground and marks of the areas on screen; the rest of the map stays hidden. */
+  private updateShown(): void {
+    const top = this.camY - VIEW_FIELD_H / 2;
+    const bottom = top + VIEW_FIELD_H;
+    this.shown.clear();
+    for (const { slot, ground, kingMark } of this.grounds) {
+      const on = slot.y + slot.h > top && slot.y - MAP_GAP < bottom;
+      if (on) this.shown.add(slot.area);
+      ground.setVisible(on);
+      kingMark?.setVisible(on);
+    }
+  }
+
+  private autoCameraX(area: number): number {
     const game = this.session.game;
     const gridCenter = (LANE.gridX + (LANE.gridCols * CELL) / 2) * SCALE;
-    const units = [...game.units.values()].filter((u) => u.area === this.viewArea && !u.dead && u.kind !== 'king');
+    const units = [...game.units.values()].filter((u) => u.area === area && !u.dead && u.kind !== 'king');
     if (game.phase !== 'fight') {
       // Showcase clips are too narrow for the whole grid: frame the army instead.
       const army = SHOWCASE ? units.filter((u) => u.kind === 'fighter') : [];
@@ -323,10 +405,10 @@ export class BattleScene extends Phaser.Scene {
     key('keydown-I', () => this.ui.toggleWavePreview());
     key('keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
-      const all = this.viewList.flatMap((v) => v.areas);
-      const i = all.indexOf(this.viewArea);
-      this.setView(all[(i + (e.shiftKey ? all.length - 1 : 1)) % all.length]!);
+      this.step(e.shiftKey ? -1 : 1, true);
     });
+    key('keydown-UP', () => this.step(-1));
+    key('keydown-DOWN', () => this.step(1));
     // Space jumps home: own lane first, a second press to the own king.
     key('keydown-SPACE', (e: KeyboardEvent) => {
       e.preventDefault();
@@ -345,15 +427,8 @@ export class BattleScene extends Phaser.Scene {
     key('keydown-G', () => this.upgradeFarm());
 
     this.input.mouse?.disableContextMenu();
-    this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, dx: number, dy: number) => {
-      this.camX += (dx || dy) * 0.15;
-      this.manualCamUntil = this.time.now + 3000;
-    });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (p.wasTouch) return this.touchDrag(p);
-      const w = this.pointerWorld(p);
-      this.hoverCell = w ? this.cellAt(w.x, w.y) : null;
-    });
+    this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => this.pointerWorld(p) && this.wheel(dy));
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => p.wasTouch && this.touchDrag(p));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       const w = this.pointerWorld(p);
       // Touch acts on release, so a swipe can pan the camera instead.
@@ -415,7 +490,7 @@ export class BattleScene extends Phaser.Scene {
     this.fieldClick(w, true);
   }
 
-  /** One-finger swipe on the battlefield pans the lane, like the mouse wheel. */
+  /** One-finger swipe on the battlefield scrolls the map (and pans a lane wider than the view). */
   private touchDrag(p: Phaser.Input.Pointer): void {
     const start = this.touchStart;
     if (!start || !p.isDown) return;
@@ -423,6 +498,7 @@ export class BattleScene extends Phaser.Scene {
     start.panned = true;
     this.camX -= (p.x - p.prevPosition.x) / FIELD_ZOOM;
     this.manualCamUntil = this.time.now + 3000;
+    this.drag(-(p.y - p.prevPosition.y) / FIELD_ZOOM);
   }
 
   private clearSelection(): void {
@@ -496,9 +572,9 @@ export class BattleScene extends Phaser.Scene {
 
   /** Grid cell under a field-pixel position on the local player's lane. */
   private cellAt(fx: number, fy: number): { col: number; row: number } | null {
-    if (this.viewArea !== this.me) return null;
-    const col = Math.floor((fx / SCALE - LANE.gridX) / CELL);
-    const row = Math.floor(fy / SCALE / CELL);
+    const lane = this.map.slot(this.me);
+    const col = Math.floor(((fx - lane.x) / SCALE - LANE.gridX) / CELL);
+    const row = Math.floor((fy - lane.y) / SCALE / CELL);
     return col >= 0 && row >= 0 && col < LANE.gridCols && row < LANE.gridRows ? { col, row } : null;
   }
 
@@ -515,7 +591,7 @@ export class BattleScene extends Phaser.Scene {
     let bestDist = Infinity;
     for (const [id, view] of this.views) {
       const u = this.session.game.units.get(id);
-      if (!u || u.area !== this.viewArea || u.dead) continue;
+      if (!u || !this.shown.has(u.area) || u.dead) continue;
       const b = view.sprite.getBounds();
       if (!b.contains(fx, fy)) continue;
       const d = Math.hypot(b.centerX - fx, b.centerY - fy);
@@ -536,38 +612,11 @@ export class BattleScene extends Phaser.Scene {
     return !!g.data.builders[g.players[this.me]!.builder]?.random;
   }
 
+  /** Glides the map to an area. */
   private setView(area: number): void {
-    this.viewArea = area;
-    this.hoverUnit = null;
+    this.targetY = this.focusY(this.map.slot(area));
     this.manualCamUntil = 0;
-    const lane = this.session.game.isLane(area);
-    this.laneBg.setVisible(lane);
-    this.arenaBg.setVisible(!lane);
-    if (lane) this.camX = this.autoCameraX();
-    const game = this.session.game;
-    const view = this.viewList.find((v) => v.areas.includes(area));
-    const owner = lane ? game.players[area] : undefined;
-    const ally = owner && owner.team === game.players[this.me]!.team;
-    const label = owner
-      ? `${owner.index === this.me ? 'YOUR' : ally ? 'ALLY' : 'FOE'} LANE - ${owner.name.toUpperCase()} (${game.data.builders[owner.builder]?.name.toUpperCase()})`
-      : area === game.battleArena()
-        ? 'ARENA BATTLE'
-        : (view?.label.replace('\n', ' ') ?? '');
-    // Own lane in gold, others in their team colour (kings and arena by the side they belong to).
-    const myTeam = game.players[this.me]!.team;
-    const color = owner
-      ? seatColor(game, owner.index, this.me)
-      : teamColor(view?.label.startsWith('MY') ? myTeam : view?.label.startsWith('FOE') ? (myTeam === 0 ? 1 : 0) : myTeam);
-    // The UI scene starts after this one; it picks the label up on its first frames.
-    this.time.delayedCall(0, () => this.ui.setFieldLabel(label, color));
-  }
-
-  /** A tab click: switch to that view, or step through its lanes if already there. */
-  private selectView(index: number): void {
-    const areas = this.viewList[index]?.areas ?? [];
-    const at = areas.indexOf(this.viewArea);
-    const next = areas[at < 0 ? 0 : (at + 1) % areas.length];
-    if (next !== undefined) this.setView(next);
+    if (this.session.game.isLane(area)) this.camX = this.autoCameraX(area);
   }
 
   /** Solo: same setup once more; online games go back to the menu. */
@@ -578,14 +627,18 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private toMenu(): void {
-    if (this.session.online) void (this.session as NetSession).room.leave();
+    if (this.session.online) {
+      void (this.session as NetSession).room.leave();
+      clearRejoin();
+      history.replaceState(null, '', location.pathname);
+    }
     this.scene.stop('ui');
     this.scene.start('title');
   }
 
-  /** World units -> field pixels (every area is drawn at the origin). */
-  private toField(x: number, y: number): { x: number; y: number } {
-    return { x: x * SCALE, y: y * SCALE };
+  /** World units in an area -> field pixels on the map. */
+  private toField(area: number, x: number, y: number): { x: number; y: number } {
+    return this.map.toField(area, x, y);
   }
 
   // ---- unit views -------------------------------------------------------------
@@ -593,6 +646,7 @@ export class BattleScene extends Phaser.Scene {
   private syncUnits(): void {
     const game = this.session.game;
     this.hpBars.clear();
+    const pair = this.targetPair();
     for (const [id, view] of this.views) {
       // Gone units drop their view; upgraded ones rebuild it for the new sprite and auras.
       const u = game.units.get(id);
@@ -600,14 +654,14 @@ export class BattleScene extends Phaser.Scene {
     }
     for (const u of game.units.values()) {
       const view = this.views.get(u.id) ?? this.createView(u);
-      const visible = u.area === this.viewArea;
+      const visible = this.shown.has(u.area);
       view.sprite.setVisible(visible);
       view.shadow.setVisible(visible && !u.dead);
       view.ring?.setVisible(visible && !u.dead);
       view.ownerRing?.setVisible(visible && !u.dead);
       if (!visible) continue;
       const pos = this.session.interpolated(u.id)!;
-      const s = this.toField(pos.x, pos.y);
+      const s = this.toField(u.area, pos.x, pos.y);
       // Jumps (back to the grid after a wave, warps) are no walking: they keep the facing and speed.
       const dx = Math.abs(s.x - view.lastX) > TELEPORT_PX ? 0 : s.x - view.lastX;
       if (Math.abs(dx) > 0.05) view.facingRight = dx > 0;
@@ -630,20 +684,51 @@ export class BattleScene extends Phaser.Scene {
       view.ownerRing?.setPosition(Math.round(s.x + lunge), Math.round(s.y)).setDepth(8.5 + s.y);
       this.animate(u, view, moving);
       if (this.time.now > view.flashUntil) {
-        // Debuffs tint the unit: stunned grey, poisoned green, slowed blue.
-        const tint = u.status & STATUS.stunned ? 0x9898a8 : u.status & STATUS.poisoned ? 0x98ff98 : u.status & STATUS.slowed ? 0x98b8ff : 0xffffff;
+        // The marked target goes reddish; debuffs tint the unit: stunned grey, poisoned green, slowed blue.
+        const tint = u === pair?.[1] ? TARGET_TINT : u.status & STATUS.stunned ? 0x9898a8 : u.status & STATUS.poisoned ? 0x98ff98 : u.status & STATUS.slowed ? 0x98b8ff : 0xffffff;
         view.sprite.setTintMode(Phaser.TintModes.MULTIPLY).setTint(tint);
       }
       this.drawHpBar(u, view, s.x, s.y);
     }
     this.drawSelection();
+    if (pair) this.drawTarget(pair[0], pair[1]);
+  }
+
+  /** The selected (else the hovered) unit and what it is attacking, both alive and on screen. */
+  private targetPair(): [UnitState, UnitState] | null {
+    const game = this.session.game;
+    const id = this.selectedUnit ?? this.hoverUnit;
+    const u = id !== null ? game.units.get(id) : undefined;
+    const t = u && u.targetId !== null ? game.units.get(u.targetId) : undefined;
+    return u && t && !u.dead && !t.dead && this.shown.has(u.area) && t.area === u.area ? [u, t] : null;
+  }
+
+  /** A dashed line from attacker to target and a ring at the target's feet (the target is also tinted). */
+  private drawTarget(u: UnitState, t: UnitState): void {
+    const from = this.views.get(u.id)?.shadow;
+    const to = this.views.get(t.id);
+    if (!from || !to) return;
+    // Chest to chest, so the line doesn't run along the ground under the crowd.
+    const ax = from.x;
+    const ay = from.y - 6;
+    const bx = to.shadow.x;
+    const by = to.shadow.y - 6;
+    const len = Math.hypot(bx - ax, by - ay);
+    const g = this.hpBars.lineStyle(1, TARGET_COLOR, 0.85);
+    for (let d = 0; d < len; d += 5) {
+      const k0 = d / len;
+      const k1 = Math.min(1, (d + 3) / len);
+      g.lineBetween(ax + (bx - ax) * k0, ay + (by - ay) * k0, ax + (bx - ax) * k1, ay + (by - ay) * k1);
+    }
+    const w = t.kind === 'king' ? 32 : 16 * to.scale;
+    g.strokeEllipse(to.shadow.x, to.shadow.y - 1, w, w * 0.4).strokeEllipse(to.shadow.x, to.shadow.y - 1, w + 2, w * 0.4 + 2);
   }
 
   /** Ring at the feet and an arrow over the head of the selected unit, wherever it walks. */
   private drawSelection(): void {
     const u = this.selectedUnit !== null ? this.session.game.units.get(this.selectedUnit) : undefined;
     const view = u ? this.views.get(u.id) : undefined;
-    const shown = !!u && !!view && !u.dead && u.area === this.viewArea;
+    const shown = !!u && !!view && !u.dead && this.shown.has(u.area);
     this.selRing.setVisible(shown);
     this.selArrow.setVisible(shown);
     if (!shown) return;
@@ -659,7 +744,7 @@ export class BattleScene extends Phaser.Scene {
     const king = u.kind === 'king';
     const spec = UNIT_SPRITES[u.def];
     const key = king ? `${KING_SPRITES[u.team]}-Idle` : spec ? `${spriteKey(spec)}-Walk` : '__WHITE';
-    const scale = spec?.scale ?? 1;
+    const scale = (spec?.scale ?? 1) * (u.kind === 'creep' || u.kind === 'merc' ? ATTACKER_SCALE : 1);
     const sprite = this.add.sprite(0, 0, key).setOrigin(0.5, king ? 0.9 : 1).setScale(scale);
     if (king) sprite.play(`${KING_SPRITES[u.team]}-idle`);
     const shadow = this.add.image(0, 0, ellipseTexture(this, king ? 28 : 12 * scale, king ? 8 : 4 * scale, 0.35)).setTint(0x000000);
@@ -678,7 +763,7 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: ring, alpha: 0.12, scaleX: 1.25, scaleY: 1.25, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     // Fighters face the incoming creeps (left), attackers face the king (right).
-    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: this.toField(u.x, u.y).x, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', faceDown: u.kind === 'fighter', fought: false, flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
+    const view = { sprite, shadow, ring, ownerRing, def: u.def, lastX: this.toField(u.area, u.x, u.y).x, speed: 0, attackUntil: 0, facingRight: u.kind !== 'fighter', faceDown: u.kind === 'fighter', fought: false, flashUntil: 0, scale, recoil: { lunge: 0, squash: 1, hop: 0 } };
     this.views.set(u.id, view);
     return view;
   }
@@ -748,13 +833,13 @@ export class BattleScene extends Phaser.Scene {
       case 'attack': {
         // The target may already be gone (killing blow), so aim at the position the event carries.
         const a = game.units.get(ev.unitId);
-        if (!a || a.area !== this.viewArea) return;
+        if (!a || !this.shown.has(a.area)) return;
         // Aim from and at where the sprites are drawn, not the raw sim positions.
         const src = this.session.interpolated(a.id) ?? a;
         const target = game.units.get(ev.targetId);
         const dst = (target?.area === a.area && this.session.interpolated(target.id)) || ev;
-        const from = this.toField(src.x, src.y);
-        const to = this.toField(dst.x, dst.y);
+        const from = this.toField(a.area, src.x, src.y);
+        const to = this.toField(a.area, dst.x, dst.y);
         const view = this.views.get(a.id);
         if (!view) return;
         const dir = to.x >= from.x ? 1 : -1;
@@ -794,16 +879,22 @@ export class BattleScene extends Phaser.Scene {
       case 'damage': {
         const t = game.units.get(ev.targetId);
         const view = this.views.get(ev.targetId);
-        if (!t || !view || t.area !== this.viewArea) return;
+        if (!t || !view || !this.shown.has(t.area)) return;
         const at = { x: t.x, y: t.y };
+        const area = t.area;
+        // Own units flash red when hit, everything else white. Digits only for hits by own units, so a
+        // crowded lane shows what your fighters deal (showcase clips keep them all).
+        const flash = t.owner === this.me ? HURT_FLASH : 0xffffff;
+        const digits = SHOWCASE || game.units.get(ev.sourceId)?.owner === this.me;
         const show = () => {
           // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
           if (this.views.get(ev.targetId) === view && this.time.now > view.flashUntil + FLASH_GAP_MS) {
-            view.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+            view.sprite.setTint(flash).setTintMode(Phaser.TintModes.FILL);
             view.flashUntil = this.time.now + 70;
           }
+          if (!digits) return;
           const p = this.session.interpolated(ev.targetId) ?? at;
-          const s = this.toField(p.x, p.y);
+          const s = this.toField(area, p.x, p.y);
           this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
         };
         // Ranged hits show when the shot lands, not when it leaves the bow.
@@ -813,7 +904,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'death': {
-        if (ev.area !== this.viewArea) return;
+        if (!this.shown.has(ev.area)) return;
         sfx(this, 'death');
         // Bounty for the local player's kills (mirrors the sim: fighter kills only, nothing in the finale).
         // Killed attackers are already gone from the state; their view (and def) lives until the next sync.
@@ -821,13 +912,13 @@ export class BattleScene extends Phaser.Scene {
         const def = game.data.units[this.views.get(ev.unitId)?.def ?? ''];
         const bounty = game.data.waves[game.wave - 1]?.endless ? 0 : def?.bounty ?? 0;
         if (killer?.kind === 'fighter' && killer.owner === this.me && bounty > 0) {
-          const at = this.toField(ev.x, ev.y);
+          const at = this.toField(ev.area, ev.x, ev.y);
           this.goldPop(at.x, at.y - 20, bounty);
           sfx(this, 'coin');
         }
         const u = game.units.get(ev.unitId);
         if (!u) return;
-        const s = this.toField(u.x, u.y);
+        const s = this.toField(u.area, u.x, u.y);
         this.playFx('smoke', s.x, s.y - 8);
         return;
       }
@@ -872,12 +963,15 @@ export class BattleScene extends Phaser.Scene {
             return { text: `${name}${leaks ? `${leaks} LEAKS` : 'CLEAN'}`, color: seatColor(game, p.index, this.me) };
           });
           this.ui.showSummary([{ text: `WAVE ${ev.wave - 1} CLEARED`, color: 0xfff080 }, ...rows]);
+          // After a boss wave this build phase ends in the arena battle.
+          const rules = game.data.rules;
+          if (rules.arenaWaves.includes(ev.wave - 1)) this.ui.showBanner([`ARENA BATTLE IN ${Math.round(rules.arenaBuildMs / 1000)}S`, 'BUILD UP FOR IT!'], 2500);
         }
         return;
       }
       case 'effect': {
-        if (ev.area !== this.viewArea) return;
-        const s = this.toField(ev.x, ev.y);
+        if (!this.shown.has(ev.area)) return;
+        const s = this.toField(ev.area, ev.x, ev.y);
         if (ev.effect === 'crit') {
           this.playFx('cutx', s.x, s.y - 8);
           sfx(this, 'slash', 1.5);
@@ -1001,42 +1095,51 @@ export class BattleScene extends Phaser.Scene {
     g.clear();
     this.ghost.setVisible(false);
     const game = this.session.game;
-    const lane = game.isLane(this.viewArea);
-    const own = this.viewArea === this.me;
     const build = game.phase === 'build';
-    const x0 = LANE.gridX * SCALE;
     const cs = CELL * SCALE;
-    this.kingMark.setVisible(lane);
-    this.youMark.setVisible(lane && own && build && !SHOWCASE);
-    if (!lane) return;
-    // While building, the own grid is framed in the player's gold with a bobbing "YOU" above it.
-    if (own && build) {
-      this.youMark.setPosition(x0 + (LANE.gridCols * cs) / 2, Math.round(-1 + Math.sin(this.time.now / 200)));
-      g.lineStyle(1, ME_COLOR, 0.7).strokeRect(x0, 0, LANE.gridCols * cs, LANE.gridRows * cs);
+    const gridX = (slot: MapSlot) => slot.x + LANE.gridX * SCALE;
+    const mine = this.map.slot(this.me);
+    const ownShown = this.shown.has(this.me);
+    this.youMark.setVisible(ownShown && build && !SHOWCASE);
+    for (const slot of this.map.slots) {
+      if (slot.kind !== 'lane' || !this.shown.has(slot.area)) continue;
+      const own = slot === mine;
+      const x0 = gridX(slot);
+      const y0 = slot.y;
+      // While building, the own grid is framed in the player's gold with a bobbing "YOU" above it.
+      if (own && build) {
+        this.youMark.setPosition(x0 + (LANE.gridCols * cs) / 2, Math.round(y0 - 1 + Math.sin(this.time.now / 200)));
+        g.lineStyle(1, ME_COLOR, 0.7).strokeRect(x0, y0, LANE.gridCols * cs, LANE.gridRows * cs);
+      }
+      g.lineStyle(1, 0xffffff, own && build ? 0.22 : 0.08);
+      for (let c = 0; c <= LANE.gridCols; c++) g.lineBetween(x0 + c * cs, y0, x0 + c * cs, y0 + LANE.gridRows * cs);
+      for (let r = 0; r <= LANE.gridRows; r++) g.lineBetween(x0, y0 + r * cs, x0 + LANE.gridCols * cs, y0 + r * cs);
+      // Leak line.
+      g.fillStyle(0xc03030, 0.5).fillRect(slot.x + LANE.leakX * SCALE, y0, 2, slot.h);
     }
-    g.lineStyle(1, 0xffffff, own && build ? 0.22 : 0.08);
-    for (let c = 0; c <= LANE.gridCols; c++) g.lineBetween(x0 + c * cs, 0, x0 + c * cs, LANE.gridRows * cs);
-    for (let r = 0; r <= LANE.gridRows; r++) g.lineBetween(x0, r * cs, x0 + LANE.gridCols * cs, r * cs);
-    // Leak line.
-    g.fillStyle(0xc03030, 0.5).fillRect(LANE.leakX * SCALE, 0, 2, LANE_PX.h);
     const sel = this.selectedUnit !== null ? game.units.get(this.selectedUnit) : undefined;
-    if (sel?.cell && sel.area === this.viewArea) g.lineStyle(1, 0xfff060, 1).strokeRect(x0 + sel.cell.col * cs, sel.cell.row * cs, cs, cs);
-    if (!own || !this.hoverCell) return;
+    if (sel?.cell && game.isLane(sel.area) && this.shown.has(sel.area)) {
+      const slot = this.map.slot(sel.area);
+      g.lineStyle(1, 0xfff060, 1).strokeRect(gridX(slot) + sel.cell.col * cs, slot.y + sel.cell.row * cs, cs, cs);
+    }
+    if (!ownShown || !this.hoverCell) return;
+    const x0 = gridX(mine);
+    const y0 = mine.y;
     const { col, row } = this.hoverCell;
     const unit = this.selectedBuild !== null ? this.fighters()[this.selectedBuild] : undefined;
     if (!unit) {
-      if (this.fighterAt(col, row)) g.fillStyle(0xffffff, 0.2).fillRect(x0 + col * cs, row * cs, cs, cs);
+      if (this.fighterAt(col, row)) g.fillStyle(0xffffff, 0.2).fillRect(x0 + col * cs, y0 + row * cs, cs, cs);
       return;
     }
     // Placement preview: ghost of the armed fighter, red when the spot or gold says no.
     const blocked = !!this.fighterAt(col, row) || game.players[this.me]!.gold < (game.data.units[unit]?.goldCost ?? 0) || !build;
-    g.fillStyle(blocked ? 0xff4040 : 0xffffff, 0.3).fillRect(x0 + col * cs, row * cs, cs, cs);
+    g.fillStyle(blocked ? 0xff4040 : 0xffffff, 0.3).fillRect(x0 + col * cs, y0 + row * cs, cs, cs);
     const spec = UNIT_SPRITES[unit];
     if (spec) {
       const key = spec.kind === 'character' ? `${spriteKey(spec)}-Idle` : `${spriteKey(spec)}-Walk`;
       this.ghost
         .setTexture(key, DIR.down) // both sheet kinds have a down-facing column
-        .setPosition(x0 + col * cs + cs / 2, (row + 1) * cs)
+        .setPosition(x0 + col * cs + cs / 2, y0 + (row + 1) * cs)
         .setTint(blocked ? 0xff6060 : 0xffffff)
         .setVisible(true);
     }

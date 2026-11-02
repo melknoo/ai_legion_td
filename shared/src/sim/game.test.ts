@@ -415,6 +415,22 @@ describe('arena', () => {
     expect(g.wave).toBe(2);
     for (const f of fightersOf(g, 0)) expect([f.area, f.x, f.dead]).toEqual([f.homeArea, f.homeX, false]);
   });
+
+  it('gives a build phase before the arena, and fighters built in it join the battle', () => {
+    const g = newGame(withRules({ arenaWaves: [1] }));
+    defend(g, 0);
+    defend(g, 1);
+    runUntil(g, phaseIs('build'));
+    expect(g.arenaNext).toBe(true);
+    expect(g.phaseEndsAtMs - g.timeMs).toBe(g.data.rules.arenaBuildMs);
+    expect(g.apply({ type: 'build', player: 0, unit: 'sprout', col: 2, row: 0 })).toEqual({ ok: true });
+    runUntil(g, phaseIs('arena'));
+    expect(g.arenaNext).toBe(false);
+    expect(fightersOf(g, 0).every((f) => f.area === g.battleArena() && !f.fresh)).toBe(true);
+    runUntil(g, phaseIs('build'));
+    expect(g.arenaNext).toBe(false);
+    expect(g.phaseEndsAtMs - g.timeMs).toBe(g.buildDurationMs(2));
+  });
 });
 
 describe('abilities', () => {

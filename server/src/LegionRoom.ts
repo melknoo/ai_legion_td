@@ -1,4 +1,4 @@
-import { Room, ServerError, type AuthContext, type Client, type RoomException } from 'colyseus';
+import { CloseCode, Room, ServerError, type AuthContext, type Client, type RoomException } from 'colyseus';
 import {
   Game,
   LEGION_DATA,
@@ -40,6 +40,8 @@ const MAX_PER_IP = Number(process.env.MAX_PER_IP ?? 6);
 /** Chat flood guard: at most this many lines per sender within CHAT_WINDOW_MS. */
 const CHAT_BURST = 5;
 const CHAT_WINDOW_MS = 5000;
+/** How long a dropped player's seat waits for them mid-game. */
+const REJOIN_S = 60;
 
 let openRooms = 0;
 const connections = new Map<string, number>();
@@ -80,7 +82,7 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
     void this.setPrivate(this.state.private);
     monitor.roomCreated(this.roomId);
     if (options.fast) {
-      this.data = { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0 } };
+      this.data = { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0, arenaBuildMs: 8000 } };
     }
 
     this.onMessage('setBuilder', (client, builder: string) => {
@@ -192,28 +194,35 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
     this.updateListing();
   }
 
-  override async onLeave(client: Client): Promise<void> {
-    this.release(client.sessionId);
+  override async onLeave(client: Client, code?: number): Promise<void> {
     this.chatTimes.delete(client.sessionId);
     const index = this.state.players.findIndex((p) => p.sessionId === client.sessionId);
     const p = this.state.players[index];
-    if (!p) return;
-    if (this.inLobby()) {
+    if (!p || this.inLobby()) {
+      this.release(client.sessionId);
+      if (!p) return;
       this.state.players.splice(index, 1);
       if (this.state.host === client.sessionId) this.state.host = this.state.players.find((q) => !q.bot)?.sessionId ?? '';
       this.reportPlayers();
       this.updateListing();
       return;
     }
-    // Mid-game: keep the seat for a while; a bot plays it meanwhile.
+    // Mid-game: a dropped player (reload, lost network) keeps seat and address slot for REJOIN_S and
+    // comes back with the reconnection token; a bot plays the seat meanwhile. Leaving on purpose hands it over at once.
     p.connected = false;
     this.reportPlayers();
-    try {
-      await this.allowReconnection(client, 60);
-      p.connected = true;
-    } catch {
-      p.bot = true;
+    if (code !== CloseCode.CONSENTED) {
+      try {
+        await this.allowReconnection(client, REJOIN_S);
+        p.connected = true;
+        this.reportPlayers();
+        return;
+      } catch {
+        // Not back in time: the bot keeps the seat.
+      }
     }
+    p.bot = true;
+    this.release(client.sessionId);
     this.reportPlayers();
   }
 
@@ -326,6 +335,7 @@ export class LegionRoom extends Room<{ state: NetState; metadata: RoomMeta }> {
     s.wave = game.wave;
     s.timeMs = game.timeMs;
     s.phaseEndsAtMs = game.phaseEndsAtMs;
+    s.arenaNext = game.arenaNext;
     s.winner = game.winner ?? -1;
     const levels = [game.kingLevels[0], game.kingLevels[1]].flatMap((l) => [l.hp, l.attack, l.regen]);
     levels.forEach((v, i) => {

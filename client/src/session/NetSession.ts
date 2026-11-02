@@ -1,4 +1,4 @@
-import type { Room } from '@colyseus/sdk';
+import { CloseCode, type Room } from '@colyseus/sdk';
 import {
   UNIT_KINDS,
   decodeEvents,
@@ -27,6 +27,7 @@ interface NetStateLike {
   wave: number;
   timeMs: number;
   phaseEndsAtMs: number;
+  arenaNext: boolean;
   winner: number;
   kingLevels: Iterable<number>;
 }
@@ -78,6 +79,7 @@ export class NetGameView implements GameView {
   wave = 1;
   timeMs = 0;
   phaseEndsAtMs = 0;
+  arenaNext = false;
   winner: TeamId | null = null;
   kingLevels: Record<TeamId, Record<KingStat, number>> = { 0: { hp: 0, attack: 0, regen: 0 }, 1: { hp: 0, attack: 0, regen: 0 } };
 
@@ -135,6 +137,7 @@ export class NetGameView implements GameView {
     this.wave = s.wave || 1;
     this.timeMs = s.timeMs ?? 0;
     this.phaseEndsAtMs = s.phaseEndsAtMs ?? 0;
+    this.arenaNext = !!s.arenaNext;
     this.winner = s.winner === 0 || s.winner === 1 ? s.winner : null;
     const lv = [...s.kingLevels];
     this.kingLevels = {
@@ -204,6 +207,7 @@ function snapshot(s: NetStateLike): Snapshot {
     wave: s.wave,
     timeMs: s.timeMs,
     phaseEndsAtMs: s.phaseEndsAtMs,
+    arenaNext: s.arenaNext,
     winner: s.winner,
     kingLevels: [...s.kingLevels],
   };
@@ -218,6 +222,7 @@ export class NetSession implements Session {
   readonly game: NetGameView;
   readonly online = true;
   onError?: (message: string) => void;
+  onConnection?: (status: 'dropped' | 'back' | 'lost') => void;
   private readonly snapshots: Snapshot[] = [];
   private readonly events: { t: number; events: GameEvent[] }[] = [];
   /** The snapshot the game view shows; positions ease towards the next queued one. */
@@ -239,6 +244,10 @@ export class NetSession implements Session {
       for (const [t, wire] of batch) this.events.push({ t, events: decodeEvents(wire) });
     });
     room.onMessage('err', (message: string) => this.onError?.(message));
+    room.onDrop(() => this.onConnection?.('dropped'));
+    room.onReconnect(() => this.onConnection?.('back'));
+    // Leaving on purpose (menu) closes with CONSENTED; anything else means the SDK gave up.
+    room.onLeave((code) => code !== CloseCode.CONSENTED && this.onConnection?.('lost'));
   }
 
   get localPlayer(): number {

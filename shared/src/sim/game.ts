@@ -134,6 +134,7 @@ export class Game implements GameView {
   wave = 1;
   timeMs = 0;
   phaseEndsAtMs: number;
+  arenaNext = false;
   winner: TeamId | null = null;
   readonly kingLevels: Record<TeamId, Record<KingStat, number>> = {
     0: { hp: 0, attack: 0, regen: 0 },
@@ -214,7 +215,10 @@ export class Game implements GameView {
       this.gatherLumber();
       if (this.phase === 'build') {
         this.regenKings();
-        if (this.timeMs >= this.phaseEndsAtMs) this.startFight();
+        if (this.timeMs >= this.phaseEndsAtMs) {
+          if (this.arenaNext) this.startArena();
+          else this.startFight();
+        }
       } else if (this.phase === 'arena') {
         this.regenKings();
         this.stepArena();
@@ -460,13 +464,14 @@ export class Game implements GameView {
     const arena = r.arenaWaves.includes(this.wave);
     this.wave++;
     if (this.wave > this.data.waves.length) return this.finish();
-    if (arena) return this.startArena();
-    this.startBuild();
+    this.startBuild(arena);
   }
 
-  private startBuild(): void {
+  /** Build phase before the next wave, or a shorter one before the arena battle (as in the original). */
+  private startBuild(arena = false): void {
     this.phase = 'build';
-    this.phaseEndsAtMs = this.timeMs + this.buildDurationMs(this.wave);
+    this.arenaNext = arena;
+    this.phaseEndsAtMs = this.timeMs + (arena ? this.data.rules.arenaBuildMs : this.buildDurationMs(this.wave));
     this.events.push({ type: 'phase', phase: 'build', wave: this.wave, endsAtMs: this.phaseEndsAtMs });
   }
 
@@ -506,9 +511,11 @@ export class Game implements GameView {
   /** Every fighter enters the arena: west lines up on the left, east on the right, mirroring their grids. */
   private startArena(): void {
     this.phase = 'arena';
+    this.arenaNext = false;
     this.phaseEndsAtMs = this.timeMs + this.data.rules.arenaMaxMs;
     const area = this.battleArena();
     for (const u of this.units.values()) {
+      u.fresh = false;
       if (u.kind !== 'fighter' || !u.cell) continue;
       const depth = 96 + (LANE.gridCols - 1 - u.cell.col) * 40 + this.rng.range(0, 16);
       u.area = area;

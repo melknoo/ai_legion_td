@@ -127,6 +127,8 @@ export interface Rules {
   arenaWaves: number[];
   /** Arena winners get wave × this gold per player (draws half). */
   arenaGoldPerWave: number;
+  /** Build phase between an arena wave and the arena battle. */
+  arenaBuildMs: number;
   arenaMaxMs: number;
   /** Prophet: rerolls of the fighter roster; the n-th costs n × rerollCost gold and lumber. */
   prophet: { rerolls: number; rerollCost: number };

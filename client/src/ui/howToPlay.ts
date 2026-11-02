@@ -20,8 +20,7 @@ const CONTROLS: Page = TOUCH
         'TAP ONE OF YOUR FIGHTERS: UPGRADE OR SELL.',
         'HOLD A BUTTON: SHOW WHAT IT DOES.',
         '',
-        'SWIPE THE FIELD TO PAN.',
-        'TABS AT THE TOP: OTHER LANES AND KINGS.',
+        'SWIPE OR TAP THE MAP: OTHER LANES, KINGS.',
         'C BUTTON: CHAT   O BUTTON: OPTIONS',
       ],
     }
@@ -34,8 +33,7 @@ const CONTROLS: Page = TOUCH
         'CLICK FIGHTER   U: UPGRADE  DEL: SELL',
         'B / G           BUY WISP / FARM UPGRADE',
         'H / J / K       KING HP / ATTACK / REGEN',
-        'TAB / SPACE     OTHER LANES / BACK HOME',
-        'ARROWS, WHEEL   PAN THE FIELD',
+        'WHEEL / MAP     OTHER LANES / SPACE: HOME',
         'ENTER           TEAM CHAT (SHIFT: ALL)',
         'T / I / O       TYPES / NEXT WAVE / OPTIONS',
       ],
@@ -103,7 +101,7 @@ const PAGES: Page[] = [
     title: 'THE KING',
     lines: [
       'EACH TEAM HAS A KING IN ITS OWN ARENA',
-      '(TAB "MY KING"). IT FIGHTS LEAKED CREEPS',
+      '(BELOW ITS LANES). IT FIGHTS LEAKED CREEPS',
       'ITSELF. ITS HP DO NOT RESET BETWEEN WAVES.',
       '',
       'KING UPGRADES (H: HP, J: ATTACK, K: REGEN)',

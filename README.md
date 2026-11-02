@@ -26,7 +26,7 @@ npm run typecheck
 ```
 
 - Open `http://localhost:5173`: the title menu offers a solo game (1v1 to 4v4 with bots), creating an online game (with a name, public or private), joining one from the list of open public games or by room code (or pasted invite link), and setting your name.
-- Online rooms: the host picks the mode (All Pick, All Random, Single Draft, All Prophet), adds bots, switches the room between public (listed for everyone) and private (code/link only) and starts; others pick team and builder and get ready. Friends on your network use your LAN IP instead of localhost.
+- Online rooms: the host picks the mode (All Pick, All Random, Single Draft, All Prophet), adds bots, switches the room between public (listed for everyone) and private (code/link only) and starts; others pick team and builder and get ready. Friends on your network use your LAN IP instead of localhost. A dropped player (reload, lost network) can rejoin a running game within 60 s: the tab keeps the reconnection token (`client/src/net/rejoin.ts`) and a bot plays the seat meanwhile.
 - Deep links: `?room=CODE` joins, `?online` creates a private room, `?builder=grove&size=2&mode=ar` (`ap`, `ar`, `sd`, `apr`) starts a solo game directly.
 - Dev options: `?fast` (short build phases), `?timeout` (setTimeout game loop for throttled/background windows), `?showcase` (bots only, 9:16 canvas and clip recording for Shorts, parameters in `docs/shorts.md`).
 - Server smoke test: `cd server && npx tsx scripts/smoke.ts` (with the server running).
@@ -37,20 +37,23 @@ Controls (everything also works with the mouse via the HUD):
 - Prophet (or the All Prophet mode): one random fighter per tier; `V` rerolls them (7 times, rising gold and lumber cost)
 - `T` or the `?` button: attack-vs-armor damage chart. Slot corners show attack type (icon) and armor (shield) in their type colours; a green/red backing means strong/weak against the coming wave
 - `I` or the wave button in the top bar (next to the king bars): pin the next wave's preview in the info panel; click again, `Esc` or selecting a unit unpins it
-- click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); `U` upgrade, `Del` sell
+- click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); a dashed red line and ring mark what the selected or hovered unit attacks; `U` upgrade, `Del` sell
+- damage numbers only show hits by your own units; your own units flash red when they are hit
 - `Esc` / right click: cancel placement and selection
 - `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen
 - `SPACE`: jump to my lane (again: my king)
-- `O` or the `O` button in the field corner: options (sound on/off, volume, screen shake, tips; turning tips back on replays them, HOW TO PLAY opens the rules pages); also on the title screen, which has its own HOW TO PLAY entry
+- `O` or the `O` button in the top bar: options (sound on/off, volume, screen shake, tips; turning tips back on replays them, HOW TO PLAY opens the rules pages); also on the title screen, which has its own HOW TO PLAY entry
 - Online: `Enter` team chat, `Shift+Enter` all chat (`Tab` switches while typing, `Esc` cancels); hotkeys pause while typing. The lobby has an all chat and a NAME button to rename yourself before the start
 - Every game opens with an intro card (who you are, team, goal); your own fighters, lane frame and names are gold, everyone else wears their team colour (WEST blue, EAST red)
-- `TAB` / view tabs: my lane, my king, foe lane, foe king; `R` restart after game over
-- The battlefield camera follows the fighting; pan with `←/→` or the mouse wheel. Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 3x
+- The battlefield is one map with every area stacked top to bottom: your lane, ally lanes, your king, the arena battle, the foe king, foe lanes (`client/src/render/fieldMap.ts`). The view shows one whole lane at a time: mouse wheel, `↑`/`↓` or `TAB`/`Shift+TAB` step to the next area, the minimap in the field's right margin jumps there on click (drag to scroll; it settles on the nearest area). No edge scrolling
+- Creeps and sends are drawn at 0.75 of their size, so the fighters stand out
+- `R` restart after game over
+- Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 2x
 
 Phones and tablets (landscape; `client/src/ui/touch.ts`):
 - tap a button to press it, hold it (~0.35 s) for its tooltip
 - tap a slot, then tap a free tile twice (first tap previews, second builds); the slot stays armed until tapped again or a tap lands off the grid
-- tap a unit to select it, empty ground to deselect; swipe the field to pan; the end screen has PLAY AGAIN / MENU buttons
+- tap a unit to select it, empty ground to deselect; swipe up/down or tap the minimap for other lanes and kings; the end screen has PLAY AGAIN / MENU buttons
 - name, room code and chat use a hidden DOM input over the field, so the on-screen keyboard opens; in the game the `C` button next to `O` opens the chat, in the lobby tap the CHAT heading
 - installable as a PWA ("Add to home screen"): `client/public/manifest.webmanifest`, service worker `client/public/sw.js` (production builds only, one cache per build, solo games also start offline). Icons come from `node tools/make-icons.mjs`
 

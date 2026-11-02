@@ -75,6 +75,8 @@ export const NetState = schema(
     wave: t.uint8(),
     timeMs: t.uint32(),
     phaseEndsAtMs: t.uint32(),
+    /** The build phase ends in the arena battle. */
+    arenaNext: t.boolean(),
     winner: t.int8(),
     /** King upgrade levels: [team0 hp, attack, regen, team1 hp, attack, regen]. */
     kingLevels: t.array('uint8'),
