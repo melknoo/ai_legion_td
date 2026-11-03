@@ -15,6 +15,8 @@ const CONTROLS: Page = TOUCH
   ? {
       title: 'CONTROLS',
       lines: [
+        'TABS LEFT OF THE COMMAND CARD: BUILD,',
+        'SEND, KING (WISPS, FARM, KING UPGRADES).',
         'TAP A COMMAND CARD SLOT, THEN TAP A FREE',
         'GRID SPOT TWICE TO BUILD THERE.',
         'TAP ONE OF YOUR FIGHTERS: UPGRADE OR SELL.',
@@ -28,10 +30,10 @@ const CONTROLS: Page = TOUCH
       title: 'CONTROLS',
       lines: [
         'QWER ASDF YXCV  PICK A COMMAND CARD SLOT',
-        '1 / 2           FIGHTERS / SENDS',
+        '1 / 2 / 3       BUILD / SEND / KING TAB',
         'CLICK THE GRID  PLACE THE PICKED FIGHTER',
         'CLICK FIGHTER   U: UPGRADE  DEL: SELL',
-        'B / G           BUY WISP / FARM UPGRADE',
+        'B / G           WISP / FARM (ANY TAB)',
         'H / J / K       KING HP / ATTACK / REGEN',
         'WHEEL / MAP     OTHER LANES / SPACE: HOME',
         'ENTER           TEAM CHAT (SHIFT: ALL)',
@@ -79,14 +81,14 @@ const PAGES: Page[] = [
       'BUILT IT, LATER 50%.',
       '',
       'GOLD COMES FROM KILLS AND AFTER EACH WAVE.',
-      'FOOD LIMITS YOUR ARMY: FARM UPGRADES (G)',
-      'RAISE IT.',
+      'FOOD LIMITS YOUR ARMY: FARM UPGRADES',
+      '(KING TAB, G) RAISE IT.',
     ],
   },
   {
     title: 'LUMBER AND SENDS',
     lines: [
-      'WISPS (B) GATHER LUMBER OVER TIME.',
+      'WISPS (KING TAB, B) GATHER LUMBER.',
       '',
       'SENDS COST LUMBER. THEY JOIN THE NEXT WAVE',
       'ON A FOE LANE, AND EACH ONE RAISES YOUR',
@@ -104,8 +106,9 @@ const PAGES: Page[] = [
       '(BELOW ITS LANES). IT FIGHTS LEAKED CREEPS',
       'ITSELF. ITS HP DO NOT RESET BETWEEN WAVES.',
       '',
-      'KING UPGRADES (H: HP, J: ATTACK, K: REGEN)',
-      'COST LUMBER AND ALSO RAISE YOUR INCOME.',
+      'KING UPGRADES (KING TAB; H: HP, J: ATTACK,',
+      'K: REGEN) COST LUMBER AND ALSO RAISE YOUR',
+      'INCOME.',
     ],
   },
   {

@@ -87,6 +87,11 @@ export class UiScene extends Phaser.Scene {
     this.chatBox?.update();
   }
 
+  /** Space and Esc close the intro card; the battlefield leaves them alone meanwhile. */
+  get introOpen(): boolean {
+    return this.intro?.open ?? false;
+  }
+
   /** While typing a chat line or reading How to Play the battlefield ignores its hotkeys. */
   get keysCaptured(): boolean {
     return !!this.closeHelp || (this.chatBox?.capturing ?? false);

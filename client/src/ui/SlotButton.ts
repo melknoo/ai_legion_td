@@ -43,6 +43,9 @@ export class SlotButton {
   private readonly label: Phaser.GameObjects.BitmapText;
   private readonly badgeBg: Phaser.GameObjects.Image;
   private readonly badges: Phaser.GameObjects.Image[];
+  /** Short text in the top-right corner (a level or a count) where fighters show their type badges. */
+  private readonly tagBg: Phaser.GameObjects.Image;
+  private readonly tag: Phaser.GameObjects.BitmapText;
   /** Pulsing bright frame around the active tile. */
   private readonly frame: Phaser.GameObjects.Rectangle;
   private readonly textures: Record<'slot' | 'slotHover' | 'slotActive', string>;
@@ -70,9 +73,11 @@ export class SlotButton {
     const row = o.badgeRow ? 1 : 0;
     this.badgeBg = backing(scene, o.w - 11 - row * 9, 2, 9, 9);
     this.badges = [0, 1].map((i) => scene.add.image(o.w - 10 - row * (1 - i) * 9, 3 + (1 - row) * i * 9, '__DEFAULT').setOrigin(0, 0));
+    this.tagBg = backing(scene, 0, 2, 1, 9);
+    this.tag = scene.add.bitmapText(o.w - 2, 3, FONT, '').setOrigin(1, 0).setTint(0xc0e8ff);
     this.frame = scene.add.rectangle(1, 1, o.w - 2, o.h - 2).setOrigin(0, 0).setStrokeStyle(2, 0xfff4a0).setVisible(false);
     scene.tweens.add({ targets: this.frame, alpha: 0.35, duration: 350, yoyo: true, repeat: -1 });
-    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges, this.frame]);
+    this.root = scene.add.container(o.x, o.y, [this.bg, this.icon, this.cornerBg, this.corner, this.labelBg, this.costIcon, this.label, this.badgeBg, ...this.badges, this.tagBg, this.tag, this.frame]);
     bindPress(this.bg.setInteractive({ useHandCursor: true }), {
       onClick: () => this.enabled && o.onClick(),
       onHover: (over) => this.hover(over),
@@ -82,7 +87,16 @@ export class SlotButton {
   setContent(
     icon: string,
     label: string,
-    opts: { corner?: string; costIcon?: string; labelColor?: number; badges?: { icon: string; tint: number }[]; badgeBg?: number } = {},
+    opts: {
+      corner?: string;
+      tag?: string;
+      costIcon?: string;
+      labelColor?: number;
+      badges?: { icon: string; tint: number }[];
+      badgeBg?: number;
+      /** Overrides the button's `iconCrop` (skill icons in a portrait slot). */
+      iconCrop?: { top: number; height: number };
+    } = {},
   ): this {
     const badges = opts.badges ?? [];
     this.badges.forEach((b, i) => {
@@ -98,13 +112,16 @@ export class SlotButton {
     if (icon !== this.iconKey) {
       this.iconKey = icon;
       this.icon.setTexture(icon);
-      const crop = this.o.iconCrop;
+      const crop = opts.iconCrop ?? this.o.iconCrop;
       if (crop && this.icon.height > crop.height) {
         this.icon.setCrop(0, crop.top, this.icon.width, crop.height).setY((this.o.iconY ?? 2) - crop.top);
       } else {
         this.icon.setCrop().setY(this.o.iconY ?? 2);
       }
     }
+    const tag = opts.tag ?? '';
+    this.tag.setText(tag);
+    this.tagBg.setVisible(tag.length > 0).setX(this.o.w - 3 - tag.length * 8).setDisplaySize(tag.length * 8 + 1, 9);
     const corner = opts.corner ?? '';
     this.corner.setText(corner);
     this.cornerBg.setVisible(corner.length > 0).setDisplaySize(corner.length * 8 + 1, 9);
@@ -207,6 +224,53 @@ export class MiniButton {
       this.refresh();
       this.onHover(false);
     }
+    return this;
+  }
+
+  private refresh(): void {
+    this.bg.setTexture(this.active ? this.textures.slotActive : this.hovered ? this.textures.slotHover : this.textures.slot);
+  }
+}
+
+/** Command card tab (1 BUILD, 2 SEND, 3 KING): hotkey, icon and name; the open one is gold. */
+export class ModeTab {
+  private readonly bg: Phaser.GameObjects.Image;
+  private readonly icon: Phaser.GameObjects.Image;
+  /** Replaces the icon while set (the send tab's page). */
+  private readonly note: Phaser.GameObjects.BitmapText;
+  private readonly textures: Record<'slot' | 'slotHover' | 'slotActive', string>;
+  private hovered = false;
+  private active = false;
+
+  constructor(
+    scene: Phaser.Scene,
+    o: { x: number; y: number; w: number; h: number; key: string; icon: string; label: string; onClick: () => void; onHover: (over: boolean) => void },
+  ) {
+    this.textures = {
+      slot: panelTexture(scene, o.w, o.h, 'slot'),
+      slotHover: panelTexture(scene, o.w, o.h, 'slotHover'),
+      slotActive: panelTexture(scene, o.w, o.h, 'slotActive'),
+    };
+    this.bg = scene.add.image(o.x, o.y, this.textures.slot).setOrigin(0, 0);
+    // Touch screens have no hotkeys to show.
+    if (o.key) {
+      backing(scene, o.x + 2, o.y + 2, 9, 9);
+      scene.add.bitmapText(o.x + 3, o.y + 3, FONT, o.key).setTint(0xfff080);
+    }
+    this.icon = scene.add.image(o.x + o.w - 4, o.y + 3, o.icon).setOrigin(1, 0);
+    this.note = scene.add.bitmapText(o.x + o.w - 3, o.y + 3, FONT, '').setOrigin(1, 0).setTint(0xc0e8ff);
+    scene.add.bitmapText(o.x + Math.ceil(o.w / 2), o.y + 13, FONT, o.label).setOrigin(0.5, 0);
+    bindPress(this.bg.setInteractive({ useHandCursor: true }), {
+      onClick: o.onClick,
+      onHover: (over) => ((this.hovered = over), this.refresh(), o.onHover(over)),
+    });
+  }
+
+  setState(active: boolean, note = ''): this {
+    this.active = active;
+    this.note.setText(note);
+    this.icon.setVisible(!note);
+    this.refresh();
     return this;
   }
 

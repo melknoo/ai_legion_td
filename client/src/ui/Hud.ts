@@ -1,17 +1,21 @@
 import Phaser from 'phaser';
-import { describeAbility, rerollCost, type GameView, type KingStat, type TeamId, type UnitDef, type UnitState } from '@legion/shared';
+import { MELEE_RANGE, describeAbility, rerollCost, type GameView, type KingStat, type TeamId, type UnitDef, type UnitState } from '@legion/shared';
 import { DIR, UNIT_SPRITES, builderPortrait, spriteKey } from '../assets/manifest.ts';
+import { HUD_H, HUD_Y } from '../layout.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window, panelTexture } from './ff6Window.ts';
 import { RichLine, richText, type Segment } from './RichLine.ts';
-import { MiniButton, SlotButton } from './SlotButton.ts';
+import { MiniButton, ModeTab, SlotButton } from './SlotButton.ts';
 import { ARMOR_ICON, ARMOR_INFO, ATTACK_INFO, ATTACK_ORDER, multiplierColor } from './typeInfo.ts';
 import { SLOT_KEYS } from './keys.ts';
 import { teamColor } from './playerColors.ts';
 import { TOUCH, bindPress } from './touch.ts';
 
-/** What the command card offers: fighters for gold or sends for lumber. */
-export type SlotMode = 'build' | 'send';
+/** What the command card offers: fighters for gold, sends for lumber, or wisps, farm and king upgrades. */
+export type SlotMode = 'build' | 'send' | 'king';
+
+/** Tab 3: wisp and farm in the top row, the king's upgrades below (command card slot -> what it buys). */
+export const KING_SLOTS: Partial<Record<number, 'worker' | 'farm' | KingStat>> = { 0: 'worker', 1: 'farm', 4: 'hp', 5: 'attack', 6: 'regen' };
 
 /** Sends per command card page (the whole 4x3 grid). */
 export const SEND_PAGE_SIZE = SLOT_KEYS.length;
@@ -29,33 +33,32 @@ export interface HudState {
 }
 
 export interface HudActions {
-  /** Slot i: pick a fighter to build or send a merc, depending on the slot mode. */
+  /** Slot i: pick a fighter to build, send a merc or buy an upgrade, depending on the slot mode. */
   pickSlot(i: number): void;
-  setSlotMode(mode: SlotMode): void;
-  nextSendPage(): void;
+  /** A tab of the command card; the open send tab turns its page. */
+  pickMode(mode: SlotMode): void;
   toggleTypeChart(): void;
   upgrade(to: string): void;
   sell(): void;
-  buyWorker(): void;
-  upgradeFarm(): void;
-  upgradeKing(stat: KingStat): void;
 }
 
-const KING_BUTTONS: { stat: KingStat; icon: string; key: string; title: string }[] = [
-  { stat: 'hp', icon: 'btn-hp', key: 'H', title: 'KING HP' },
-  { stat: 'attack', icon: 'btn-attack', key: 'J', title: 'KING ATTACK' },
-  { stat: 'regen', icon: 'btn-regen', key: 'K', title: 'KING REGEN' },
+const MODE_TABS: { mode: SlotMode; key: string; icon: string; label: string }[] = [
+  { mode: 'build', key: '1', icon: 'icon-coin', label: 'BUILD' },
+  { mode: 'send', key: '2', icon: 'icon-log', label: 'SEND' },
+  { mode: 'king', key: '3', icon: 'icon-crown', label: 'KING' },
 ];
+
+const KING_BUTTONS: Record<KingStat, { icon: string; key: string; title: string }> = {
+  hp: { icon: 'btn-hp', key: 'H', title: 'KING HP' },
+  attack: { icon: 'btn-attack', key: 'J', title: 'KING ATTACK' },
+  regen: { icon: 'btn-regen', key: 'K', title: 'KING REGEN' },
+};
 
 type Hover =
   | { on: 'slot'; index: number }
   | { on: 'action'; index: number }
   | { on: 'mode'; mode: SlotMode }
-  | { on: 'page' }
   | { on: 'chart' }
-  | { on: 'worker' }
-  | { on: 'farm' }
-  | { on: 'king'; stat: KingStat }
   | { on: 'wave' };
 
 /** How the info panel compares a unit: a fighter against the wave, an attacker by its weak spots. */
@@ -68,16 +71,42 @@ export function facesetKey(unitId: string): string {
 
 const pct = (m: number) => `${Math.round(m * 100)}%`;
 
+/** Width of a RichLine (icons are 7 px wide, the bow 8, the heart 9). */
+function segmentsWidth(segments: Segment[]): number {
+  const iconW: Record<string, number> = { 'icon-heart': 9, 'icon-bow': 8 };
+  return segments.reduce((w, s) => w + ('icon' in s ? (iconW[s.icon] ?? 7) + (s.gap ?? 2) : s.text.length * 8 + (s.gap ?? 4)), 0);
+}
+
+/**
+ * The HUD's Graphics (king bars, minimap) draw after all its images and texts: a Graphics in
+ * between them splits their batch into one more draw call each. Overlays sit far above.
+ */
+export const HUD_GFX_DEPTH = 100;
 /** Distinct merc kinds the send queue strip can list. */
 const QUEUE_GROUPS = 10;
 /** Lines the info panel body can hold. */
 const BODY_LINES = 4;
 /** King HP bars in the top bar; the next-wave button sits right of them. */
 const KING_BAR = { x: 280, w: 96 };
+/** Gold, lumber, income and food in the top bar, right of the wave counter. */
+const RES_X = 96;
 /** Gold/lumber gains within this window pop up as one "+N" at their counter. */
 const RES_POP_MS = 300;
 /** Where each counter sits and how its "+N" is tinted. */
-const RES_POP = { gold: { x: 356, tint: 0xffe040 }, lumber: { x: 418, tint: 0x90e070 } } as const;
+const RES_POP = { gold: { x: RES_X + 10, tint: 0xffe040 }, lumber: { x: RES_X + 64, tint: 0x90e070 } } as const;
+
+// Bottom panels (layout pixels): command card (a column of tabs, then the 4x3 slots), info, minimap.
+const CARD = { x: 2, w: 207 };
+const TAB = { x: 5, w: 44, h: 23 };
+const SLOT = { x: 51, w: 38, h: 23 };
+/** Row pitch of tabs and slots. */
+const ROW = 24;
+const INFO = { x: 211, w: 213 };
+/** Text column of the info panel, right of the portrait. */
+const INFO_TX = INFO.x + 46;
+/** Portraits show their face band, skill icons (24 px) nearly all of it. */
+const FACE_CROP = { top: 6, height: SLOT.h };
+const SKILL_CROP = { top: 1, height: SLOT.h };
 
 /** Bottom command panels and top status bar, mouse and keyboard driven. */
 export class Hud {
@@ -87,16 +116,15 @@ export class Hud {
   /** Creeps and sends still alive on each team's side, next to its king bar. */
   private readonly alive: Phaser.GameObjects.BitmapText[];
   private readonly slots: SlotButton[];
-  private readonly modeButtons: Record<SlotMode, MiniButton>;
-  private readonly pageButton: MiniButton;
+  private readonly tabs: Record<SlotMode, ModeTab>;
   private readonly hand: Phaser.GameObjects.Image;
   private readonly portrait: Phaser.GameObjects.Image;
   private readonly infoName: Phaser.GameObjects.BitmapText;
   private readonly infoSub: RichLine;
-  private readonly stats: Phaser.GameObjects.Container;
-  private readonly statIcons: Phaser.GameObjects.Image[];
-  private readonly statText: Phaser.GameObjects.BitmapText[];
-  private readonly types: RichLine;
+  /** HP, armor and armor type. */
+  private readonly defense: RichLine;
+  /** Damage and attack type, then MELEE or the reach of a ranged attack. */
+  private readonly offense: RichLine;
   private readonly matchup: RichLine;
   private readonly infoBody: RichLine[];
   private readonly waveButton: {
@@ -116,9 +144,6 @@ export class Hud {
   private readonly actions: SlotButton[];
   private actionTargets: ({ kind: 'upgrade'; to: string } | { kind: 'sell' })[] = [];
   private readonly res: Record<'gold' | 'lumber' | 'income' | 'food', Phaser.GameObjects.BitmapText>;
-  private readonly worker: SlotButton;
-  private readonly farm: SlotButton;
-  private readonly kingButtons: SlotButton[];
   private portraitState = '';
   private readonly queueBox: Phaser.GameObjects.Image;
   private readonly queueLabel: Phaser.GameObjects.BitmapText;
@@ -142,7 +167,7 @@ export class Hud {
     const myTeam = game.players[player]!.team;
     scene.add.bitmapText(252, 4, FONT, 'MY').setTint(teamColor(myTeam));
     scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(teamColor(myTeam === 0 ? 1 : 0));
-    this.kingBars = scene.add.graphics();
+    this.kingBars = scene.add.graphics().setDepth(HUD_GFX_DEPTH);
     this.alive = [0, 1].map((row) => scene.add.bitmapText(474, 4 + row * 10, FONT, '').setOrigin(1, 0));
     // Next wave: hover shows it in the info panel, a click (or I) pins it there.
     const waveTextures = {
@@ -161,92 +186,90 @@ export class Hud {
     const waveHover = hoverFn({ on: 'wave' });
     bindPress(waveBg.setInteractive({ useHandCursor: true }), { onClick: () => this.toggleWave(), onHover: waveHover });
 
-    // Bottom panels (y 186..270). Left: 4x3 command card (QWER / ASDF / YXCV) plus a column of mode buttons.
-    ff6Window(scene, 2, 186, 178, 84);
+    // Resources in the top bar, between the wave counter and the options button.
+    scene.add.image(RES_X, 5, 'icon-coin').setOrigin(0, 0);
+    scene.add.image(RES_X + 54, 5, 'icon-log').setOrigin(0, 0);
+    scene.add.image(RES_X + 54, 15, 'icon-food').setOrigin(0, 0);
+    this.res = {
+      gold: scene.add.bitmapText(RES_X + 10, 4, FONT, ''),
+      lumber: scene.add.bitmapText(RES_X + 64, 4, FONT, ''),
+      income: scene.add.bitmapText(RES_X, 14, FONT, ''),
+      food: scene.add.bitmapText(RES_X + 64, 14, FONT, ''),
+    };
+
+    // Command card: three tabs (1 BUILD, 2 SEND, 3 KING), then the 4x3 slots (QWER / ASDF / YXCV).
+    ff6Window(scene, CARD.x, HUD_Y, CARD.w, HUD_H);
+    this.tabs = Object.fromEntries(
+      MODE_TABS.map((t, i) => [
+        t.mode,
+        new ModeTab(scene, {
+          x: TAB.x,
+          y: HUD_Y + 3 + i * ROW,
+          w: TAB.w,
+          h: TAB.h,
+          key: TOUCH ? '' : t.key,
+          icon: t.icon,
+          label: t.label,
+          onClick: () => act.pickMode(t.mode),
+          onHover: hoverFn({ on: 'mode', mode: t.mode }),
+        }),
+      ]),
+    ) as Record<SlotMode, ModeTab>;
     this.slots = SLOT_KEYS.map((_, i) =>
       new SlotButton(scene, {
-        x: 5 + (i % 4) * 39,
-        y: 189 + Math.floor(i / 4) * 26,
-        w: 38,
-        h: 25,
+        x: SLOT.x + (i % 4) * (SLOT.w + 1),
+        y: HUD_Y + 3 + Math.floor(i / 4) * ROW,
+        w: SLOT.w,
+        h: SLOT.h,
         iconY: 0,
-        iconCrop: { top: 5, height: 25 },
+        iconCrop: FACE_CROP,
         badgeRow: true,
         onClick: () => act.pickSlot(i),
         onHover: hoverFn({ on: 'slot', index: i }),
       }),
     );
-    // Touch: the column gets the full width up to the window border, for fingers.
-    const [miniX, miniSize, miniY] = TOUCH ? [162, 16, [189, 206, 225, 250]] : [164, 13, [189, 203, 222, 254]];
-    const mini = (y: number, icon: { icon?: string; text?: string }, onClick: () => void, hover: Hover) =>
-      new MiniButton(scene, { x: miniX, y, size: miniSize, touchPad: 2, ...icon, onClick, onHover: hoverFn(hover) });
-    this.modeButtons = {
-      build: mini(miniY[0]!, { icon: 'icon-coin' }, () => act.setSlotMode('build'), { on: 'mode', mode: 'build' }),
-      send: mini(miniY[1]!, { icon: 'icon-log' }, () => act.setSlotMode('send'), { on: 'mode', mode: 'send' }),
-    };
-    this.pageButton = mini(miniY[2]!, { text: '>' }, () => act.nextSendPage(), { on: 'page' });
-    mini(miniY[3]!, { text: '?' }, () => act.toggleTypeChart(), { on: 'chart' });
     this.hand = scene.add.image(0, 0, 'icon-hand').setOrigin(1, 0.5).setDepth(1);
     scene.tweens.add({ targets: this.hand, x: '-=2', duration: 300, yoyo: true, repeat: -1 });
 
     // Send queue: what this player bought for the next wave start, just above the command card.
-    this.queueBox = ff6Window(scene, 2, 164, 60, 21).setVisible(false);
-    this.queueLabel = scene.add.bitmapText(7, 171, FONT, '').setTint(0xc0c8f0);
+    const qy = HUD_Y - 22;
+    this.queueBox = ff6Window(scene, 2, qy, 60, 21).setVisible(false);
+    this.queueLabel = scene.add.bitmapText(7, qy + 7, FONT, '').setTint(0xc0c8f0);
     this.queueIcons = Array.from({ length: QUEUE_GROUPS }, () => {
-      const img = scene.add.image(0, 167, '__DEFAULT').setOrigin(0, 0).setVisible(false);
-      return { img, count: scene.add.bitmapText(0, 175, FONT, '') };
+      const img = scene.add.image(0, qy + 3, '__DEFAULT').setOrigin(0, 0).setVisible(false);
+      return { img, count: scene.add.bitmapText(0, qy + 11, FONT, '') };
     });
 
-    // Middle: info / tooltip.
-    ff6Window(scene, 182, 186, 156, 84);
-    this.portrait = scene.add.image(186, 190, '__DEFAULT').setOrigin(0, 0);
-    this.infoName = scene.add.bitmapText(228, 190, FONT, '');
-    this.infoSub = new RichLine(scene, 228, 199);
-    // HP, damage (attack type icon), armor (armor type icon), range.
-    this.statIcons = ['icon-heart', 'icon-sword', 'icon-shield', 'icon-range'].map((key, i) =>
-      scene.add.image(228 + (i % 2) * 52, 209 + Math.floor(i / 2) * 10, key).setOrigin(0, 0),
-    );
-    this.statText = this.statIcons.map((_, i) => scene.add.bitmapText(238 + (i % 2) * 52, 210 + Math.floor(i / 2) * 10, FONT, ''));
-    this.stats = scene.add.container(0, 0, [...this.statIcons, ...this.statText]);
-    this.types = new RichLine(scene, 187, 230);
-    this.matchup = new RichLine(scene, 187, 240);
-    this.infoBody = Array.from({ length: BODY_LINES }, (_, i) => new RichLine(scene, 187, 250 + i * 9));
+    // Middle: info / tooltip, with the damage type chart button in its corner.
+    ff6Window(scene, INFO.x, HUD_Y, INFO.w, HUD_H);
+    this.portrait = scene.add.image(INFO.x + 4, HUD_Y + 3, '__DEFAULT').setOrigin(0, 0);
+    this.infoName = scene.add.bitmapText(INFO_TX, HUD_Y + 3, FONT, '');
+    this.infoSub = new RichLine(scene, INFO_TX, HUD_Y + 12);
+    this.defense = new RichLine(scene, INFO_TX, HUD_Y + 22);
+    this.offense = new RichLine(scene, INFO_TX, HUD_Y + 32);
+    this.matchup = new RichLine(scene, INFO.x + 4, HUD_Y + 43);
+    this.infoBody = Array.from({ length: BODY_LINES }, () => new RichLine(scene, INFO.x + 4, HUD_Y + 52));
     this.actions = Array.from({ length: 3 }, (_, i) =>
       new SlotButton(scene, {
-        x: 186 + i * 50,
-        y: 231,
+        x: INFO.x + 4 + i * 50,
+        y: HUD_Y + 43,
         w: 48,
-        h: 36,
+        h: 31,
+        iconY: 1,
         onClick: () => this.runAction(i),
         onHover: hoverFn({ on: 'action', index: i }),
       }),
     );
-
-    // Right: resources, wisps and king upgrades.
-    ff6Window(scene, 340, 186, 138, 84);
-    scene.add.image(346, 191, 'icon-coin').setOrigin(0, 0);
-    scene.add.image(408, 191, 'icon-log').setOrigin(0, 0);
-    scene.add.image(408, 202, 'icon-food').setOrigin(0, 0);
-    this.res = {
-      gold: scene.add.bitmapText(356, 190, FONT, ''),
-      lumber: scene.add.bitmapText(418, 190, FONT, ''),
-      income: scene.add.bitmapText(346, 201, FONT, ''),
-      food: scene.add.bitmapText(418, 201, FONT, ''),
-    };
-    this.worker = new SlotButton(scene, { x: 343, y: 225, w: 26, h: 40, onClick: () => act.buyWorker(), onHover: hoverFn({ on: 'worker' }) });
-    this.farm = new SlotButton(scene, { x: 370, y: 225, w: 26, h: 40, onClick: () => act.upgradeFarm(), onHover: hoverFn({ on: 'farm' }) });
-    this.kingButtons = KING_BUTTONS.map(
-      (k, i) =>
-        new SlotButton(scene, {
-          x: 397 + i * 27,
-          y: 225,
-          w: 26,
-          h: 40,
-          onClick: () => act.upgradeKing(k.stat),
-          onHover: hoverFn({ on: 'king', stat: k.stat }),
-        }),
-    );
-    scene.add.bitmapText(421, 214, FONT, 'KING').setTint(0xc0c8f0);
+    const help = TOUCH ? 16 : 13;
+    new MiniButton(scene, {
+      x: INFO.x + INFO.w - 3 - help,
+      y: HUD_Y + 3,
+      size: help,
+      touchPad: 2,
+      text: '?',
+      onClick: () => act.toggleTypeChart(),
+      onHover: hoverFn({ on: 'chart' }),
+    });
   }
 
   /** Pin or unpin the next-wave preview in the info panel. */
@@ -263,20 +286,36 @@ export class Hud {
     const me = g.players[this.player]!;
     this.drawTop();
 
-    // Slots: fighters for gold (placeable between waves, browsable during one), or sends for lumber.
+    // Slots: fighters for gold (placeable between waves, browsable during one), sends for lumber,
+    // or wisps, farm and king upgrades.
     const send = s.slotMode === 'send';
     const open = g.phase === 'build' || g.phase === 'fight';
     const prophet = !!g.data.builders[me.builder]?.random;
     const sends = Object.values(g.data.mercs);
     const pages = Math.ceil(sends.length / SEND_PAGE_SIZE);
     const build = g.phase === 'build';
-    this.modeButtons.build.setState(open, !send);
-    this.modeButtons.send.setState(open, send);
-    this.pageButton.setVisible(send && open && pages > 1);
+    this.tabs.build.setState(s.slotMode === 'build');
+    this.tabs.send.setState(send, send && pages > 1 ? `${s.sendPage + 1}/${pages}` : '');
+    this.tabs.king.setState(s.slotMode === 'king');
     this.hand.setVisible(false);
     const wave = g.data.waves[g.wave - 1];
     const creep = wave ? g.data.units[wave.creep] : undefined;
     this.slots.forEach((slot, i) => {
+      if (s.slotMode === 'king') {
+        const what = KING_SLOTS[i];
+        slot.setVisible(!!what && open);
+        if (!what) return;
+        const k = this.kingSlot(what);
+        slot.setContent(k.icon, k.label, {
+          corner: TOUCH ? '' : k.key,
+          tag: k.tag,
+          costIcon: k.costIcon,
+          labelColor: k.ok || !k.costIcon ? 0xffffff : 0xff7070,
+          iconCrop: SKILL_CROP,
+        });
+        slot.setState(k.ok);
+        return;
+      }
       if (send) {
         const merc = sends[s.sendPage * SEND_PAGE_SIZE + i];
         slot.setVisible(!!merc && open);
@@ -323,28 +362,42 @@ export class Hud {
         badgeBg: vs > 1.001 ? 0x1c6a28 : vs < 0.999 ? 0x7a2020 : undefined,
       });
       slot.setState(ok, active, s.selectedBuild !== null && !active);
-      if (active) this.hand.setVisible(true).setPosition(slot.root.x + 2, slot.root.y + 13);
+      if (active) this.hand.setVisible(true).setPosition(slot.root.x + 2, slot.root.y + 12);
     });
 
-    // Resources and upgrade buttons.
     this.res.gold.setText(String(me.gold));
     this.res.lumber.setText(String(me.lumber));
     this.res.income.setText(`INC+${me.income}`);
     this.res.food.setText(`${g.foodUsed(this.player)}/${me.foodCap}`);
     this.popRes('gold', me.gold);
     this.popRes('lumber', me.lumber);
-    const r = g.data.rules;
-    this.worker.setContent('btn-worker', `${me.workers}`, { corner: 'B' }).setState(me.gold >= r.workerCost && me.workers < r.maxWorkers);
-    const farm = r.farms[me.farmLevel];
-    this.farm.setContent('btn-farm', `${me.farmLevel}`, { corner: 'G' }).setState(!!farm && me.gold >= farm.gold && me.lumber >= farm.lumber);
-    this.kingButtons.forEach((b, i) => {
-      const k = KING_BUTTONS[i]!;
-      const lvl = g.kingLevels[me.team][k.stat];
-      b.setContent(k.icon, `${lvl}`, { corner: k.key }).setState(me.lumber >= r.king.upgradeLumber && lvl < this.kingMax(k.stat));
-    });
 
     this.drawQueue();
     this.drawInfo(s);
+  }
+
+  /**
+   * A tab 3 slot: icon, hotkey (they work from every tab), what you have in the corner
+   * (wisps, farm or king level) and the price, or MAX.
+   */
+  private kingSlot(what: 'worker' | 'farm' | KingStat): { icon: string; key: string; tag: string; label: string; costIcon?: string; ok: boolean } {
+    const g = this.game;
+    const me = g.players[this.player]!;
+    const r = g.data.rules;
+    if (what === 'worker') {
+      const more = me.workers < r.maxWorkers;
+      return { icon: 'btn-worker', key: 'B', tag: `${me.workers}`, label: more ? `${r.workerCost}` : 'MAX', costIcon: more ? 'icon-coin' : undefined, ok: more && me.gold >= r.workerCost };
+    }
+    if (what === 'farm') {
+      const farm = r.farms[me.farmLevel];
+      const ok = !!farm && me.gold >= farm.gold && me.lumber >= farm.lumber;
+      return { icon: 'btn-farm', key: 'G', tag: `${me.farmLevel}`, label: farm ? `${farm.lumber}` : 'MAX', costIcon: farm ? 'icon-log' : undefined, ok };
+    }
+    const k = KING_BUTTONS[what];
+    const lvl = g.kingLevels[me.team][what];
+    const more = lvl < this.kingMax(what);
+    const cost = r.king.upgradeLumber;
+    return { icon: k.icon, key: k.key, tag: `${lvl}`, label: more ? `${cost}` : 'MAX', costIcon: more ? 'icon-log' : undefined, ok: more && me.lumber >= cost };
   }
 
   /** Bought sends grouped by kind ("imp x3"), with the wave they will join. */
@@ -406,7 +459,10 @@ export class Hud {
     this.updateActions(showActions ? ownFighter : undefined);
 
     if (h?.on === 'slot') {
-      if (s.slotMode === 'send') {
+      if (s.slotMode === 'king') {
+        const what = KING_SLOTS[h.index];
+        if (what) return this.showKingSlot(what);
+      } else if (s.slotMode === 'send') {
         const merc = Object.values(g.data.mercs)[s.sendPage * SEND_PAGE_SIZE + h.index];
         if (merc) return this.showUnit(merc.unit, `SEND {log}${merc.lumberCost}`, 'attacker', `+${merc.incomeGain} INCOME`);
       } else if (h.index === REROLL_SLOT && g.data.builders[me.builder]?.random) {
@@ -417,42 +473,28 @@ export class Hud {
       } else {
         const id = me.fighters[h.index];
         const how = g.phase === 'build' ? '' : 'BUILD AFTER WAVE';
-        if (id) return this.showUnit(id, `TIER ${h.index + 1}  {coin}${g.data.units[id]?.goldCost}`, 'fighter', how);
+        if (id) return this.showUnit(id, `TIER ${h.index + 1}  ${this.price(id)}`, 'fighter', how);
       }
     }
     if (h?.on === 'mode') {
-      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', TOUCH ? '' : 'KEY 1', 'FIGHTERS FOR {coin}GOLD');
-      return this.showText('icon-log', 'SEND', TOUCH ? '' : 'KEY 2', 'HITS FOE, +INCOME');
-    }
-    if (h?.on === 'page') {
+      const key = (n: number) => (TOUCH ? '' : `KEY ${n}`);
+      if (h.mode === 'build') return this.showText('icon-coin', 'BUILD', key(1), 'FIGHTERS FOR {coin}GOLD');
+      if (h.mode === 'king') return this.showText('icon-crown', 'KING', key(3), 'WISPS, FARM, KING\nUPGRADES');
       const pages = Math.ceil(Object.keys(g.data.mercs).length / SEND_PAGE_SIZE);
-      return this.showText('icon-log', 'MORE SENDS', `PAGE ${s.sendPage + 1}/${pages}`, TOUCH ? '' : 'N: NEXT PAGE');
+      const page = s.slotMode === 'send' ? `\n${TOUCH ? 'TAP' : 'CLICK'} AGAIN: PAGE ${((s.sendPage + 1) % pages) + 1}` : '';
+      return this.showText('icon-log', 'SEND', key(2), `HITS FOE, +INCOME${page}`);
     }
     if (h?.on === 'chart') {
       return this.showText(ARMOR_ICON, 'DAMAGE TYPES', TOUCH ? '' : 'T: OPEN CHART', 'ATTACK VS ARMOR');
     }
-    if (h?.on === 'worker') {
-      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `{coin}${r.workerCost}`, `{log}${r.lumberPerWorker} EVERY ${r.lumberIntervalMs / 1000}S`);
-    }
-    if (h?.on === 'farm') {
-      const farm = r.farms[me.farmLevel];
-      if (!farm) return this.showText('btn-farm', 'FARM', 'MAXED', '');
-      return this.showText('btn-farm', `FARM LV ${me.farmLevel}/${r.farms.length}`, `{coin}${farm.gold} {log}${farm.lumber}`, `+{food}${farm.food} SUPPLY`);
-    }
-    if (h?.on === 'king') {
-      const k = KING_BUTTONS.find((b) => b.stat === h.stat)!;
-      const lvl = g.kingLevels[me.team][h.stat];
-      const gain = h.stat === 'hp' ? `+${r.king.hpBase + r.king.hpStep * (lvl + 1)} HP` : h.stat === 'attack' ? `+${r.king.attackStep} DMG` : `+${r.king.regenStep} REGEN`;
-      return this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(h.stat)}  {log}${r.king.upgradeLumber}`, `${gain} +${r.king.upgradeIncome} INC`);
-    }
     if (h?.on === 'action' && selected) {
       const t = this.actionTargets[h.index];
-      if (t?.kind === 'upgrade') return this.showUnit(t.to, `UPGRADE {coin}${g.data.units[t.to]?.goldCost}`, 'fighter', '');
+      if (t?.kind === 'upgrade') return this.showUnit(t.to, `UPGRADE ${this.price(t.to)}`, 'fighter', '');
     }
     if (h?.on === 'wave' || this.wavePinned) return this.showWave(this.nextWave(), true);
     // The armed fighter: on touch there is no hover over its slot to show it.
     const armed = s.slotMode === 'build' && s.selectedBuild !== null ? me.fighters[s.selectedBuild] : undefined;
-    if (armed && !hoveredOther) return this.showUnit(armed, `TIER ${s.selectedBuild! + 1}  {coin}${g.data.units[armed]?.goldCost}`, 'fighter', TOUCH ? 'TAP A SPOT TWICE' : '');
+    if (armed && !hoveredOther) return this.showUnit(armed, `TIER ${s.selectedBuild! + 1}  ${this.price(armed)}`, 'fighter', TOUCH ? 'TAP A SPOT TWICE' : '');
     const hovered = hoveredOther ? g.units.get(s.hoverUnit!) : undefined;
     const live = hovered ?? selected;
     if (live) return this.showLive(live);
@@ -461,6 +503,31 @@ export class Hud {
       return this.showText('icon-hand', 'COMMANDS', '', TOUCH ? 'TAP UNIT: INFO' : 'CLICK UNIT: INFO');
     }
     this.showWave(g.wave, false);
+  }
+
+  /** Price and gain of a tab 3 slot. */
+  private showKingSlot(what: 'worker' | 'farm' | KingStat): void {
+    const g = this.game;
+    const me = g.players[this.player]!;
+    const r = g.data.rules;
+    if (what === 'worker') {
+      return this.showText('btn-worker', `WISP ${me.workers}/${r.maxWorkers}`, `{coin}${r.workerCost}`, `{log}${r.lumberPerWorker} EVERY ${r.lumberIntervalMs / 1000}S`);
+    }
+    if (what === 'farm') {
+      const farm = r.farms[me.farmLevel];
+      if (!farm) return this.showText('btn-farm', 'FARM', 'MAXED', '');
+      return this.showText('btn-farm', `FARM LV ${me.farmLevel}/${r.farms.length}`, `{coin}${farm.gold} {log}${farm.lumber}`, `+{food}${farm.food} SUPPLY`);
+    }
+    const k = KING_BUTTONS[what];
+    const lvl = g.kingLevels[me.team][what];
+    const gain = what === 'hp' ? `+${r.king.hpBase + r.king.hpStep * (lvl + 1)} HP` : what === 'attack' ? `+${r.king.attackStep} DMG` : `+${r.king.regenStep} REGEN`;
+    this.showText(k.icon, k.title, `LV ${lvl}/${this.kingMax(what)}  {log}${r.king.upgradeLumber}`, `${gain} +${r.king.upgradeIncome} INC`);
+  }
+
+  /** What a fighter costs: gold and food. */
+  private price(id: string): string {
+    const d = this.game.data.units[id];
+    return `{coin}${d?.goldCost ?? 0} {food}${d?.food ?? 0}`;
   }
 
   /** The wave still to come: the current one between waves, the following one while fighting. */
@@ -496,20 +563,11 @@ export class Hud {
     this.setPortrait(king ? 'btn-hp' : facesetKey(id));
     this.infoName.setText(d.name.toUpperCase());
     this.infoSub.set(richText(sub, 0xc0c8f0));
-    this.stats.setVisible(true);
     this.setStats(d, live);
-    const atk = ATTACK_INFO[d.attack.type];
-    const arm = ARMOR_INFO[d.armorType];
-    this.types.set([
-      { icon: atk.icon, tint: atk.color },
-      { text: atk.name, color: atk.color, gap: 12 },
-      { icon: ARMOR_ICON, tint: arm.color },
-      { text: arm.name, color: arm.color },
-    ]);
     this.matchup.set(this.compare(d, role));
     const abilities = [...(d.abilities ?? []), ...(live?.granted ?? [])].map(describeAbility);
     const lines = [...abilities, ...body.split('\n')].filter(Boolean);
-    this.setBody(250, lines.slice(0, 2));
+    this.setBody(INFO.x + 4, HUD_Y + 52, lines.slice(0, 2));
   }
 
   /**
@@ -546,32 +604,41 @@ export class Hud {
     this.setPortrait(icon);
     this.infoName.setText(name);
     this.infoSub.set(richText(sub, 0xc0c8f0));
-    this.stats.setVisible(false);
-    this.types.set([]);
+    this.defense.set([]);
+    this.offense.set([]);
     this.matchup.set([]);
-    // Without stats the text can start right under the portrait.
-    this.setBody(230, body.split('\n'));
+    // Without stats the text starts where they would be, next to the portrait.
+    this.setBody(INFO_TX, HUD_Y + 22, body.split('\n'));
   }
 
-  private setBody(y: number, lines: string[]): void {
+  private setBody(x: number, y: number, lines: string[]): void {
     this.infoBody.forEach((line, i) => {
-      line.root.setY(y + i * 9);
+      line.root.setPosition(x, y + i * 9);
       line.set(richText(lines[i] ?? ''));
     });
   }
 
-  /** Definition stats, or a live unit's actual max HP and bonuses; damage and armor in their type colours. */
+  /**
+   * Definition stats, or a live unit's actual max HP and bonuses, in two rows: defense (HP, armor)
+   * and attack (damage, reach), types named in their colours. A damage range too wide for the row
+   * (late bosses) shows its average.
+   */
   private setStats(d: UnitDef, live?: UnitState): void {
-    const [hp, dmg, arm, rng] = this.statText;
     const atk = ATTACK_INFO[d.attack.type];
-    const armColor = ARMOR_INFO[d.armorType].color;
-    this.statIcons[1]!.setTexture(atk.icon).setTint(atk.color);
-    this.statIcons[2]!.setTexture(ARMOR_ICON).setTint(armColor);
+    const arm = ARMOR_INFO[d.armorType];
+    this.defense.set([
+      { icon: 'icon-heart', gap: 2 },
+      { text: String(live ? live.maxHp : d.hp), gap: 8 },
+      { icon: ARMOR_ICON, tint: arm.color, gap: 2 },
+      { text: `${d.armor + (live?.mods.armor ?? 0)} ${arm.name}`, color: arm.color },
+    ]);
     const bonus = live?.mods.damage ?? 0;
-    hp!.setText(String(live ? live.maxHp : d.hp));
-    dmg!.setText(`${d.attack.damage[0] + bonus}-${d.attack.damage[1] + bonus}`).setTint(atk.color);
-    arm!.setText(String(d.armor + (live?.mods.armor ?? 0))).setTint(armColor);
-    rng!.setText(String(d.attack.range));
+    const [lo, hi] = [d.attack.damage[0] + bonus, d.attack.damage[1] + bonus];
+    const reach: Segment[] =
+      d.attack.range <= MELEE_RANGE ? [{ text: 'MELEE', color: 0xc0c8f0 }] : [{ icon: 'icon-bow', gap: 2 }, { text: String(d.attack.range) }];
+    const row = (damage: string): Segment[] => [{ icon: atk.icon, tint: atk.color, gap: 2 }, { text: `${damage} ${atk.name}`, color: atk.color, gap: 8 }, ...reach];
+    const wide = row(`${lo}-${hi}`);
+    this.offense.set(segmentsWidth(wide) > INFO.x + INFO.w - 4 - INFO_TX ? row(String(Math.round((lo + hi) / 2))) : wide);
   }
 
   private setPortrait(key: string): void {
@@ -579,7 +646,10 @@ export class Hud {
     this.portraitState = key;
     // Small icons sit centred in the portrait box.
     const small = !key.endsWith('-Face');
-    this.portrait.setTexture(key).setOrigin(small ? 0.5 : 0, small ? 0.5 : 0).setPosition(small ? 205 : 186, small ? 209 : 190);
+    this.portrait
+      .setTexture(key)
+      .setOrigin(small ? 0.5 : 0, small ? 0.5 : 0)
+      .setPosition(INFO.x + (small ? 23 : 4), HUD_Y + (small ? 22 : 3));
   }
 
   private updateActions(unit: UnitState | undefined): void {
@@ -602,9 +672,8 @@ export class Hud {
         b.setContent('btn-sell', String(refund), { costIcon: 'icon-coin', corner: 'DEL' }).setState(true);
       }
     });
-    // Leave room for the action buttons below the stats.
+    // The action buttons take the place of the comparison and the notes.
     this.infoBody.forEach((line) => line.setVisible(!unit));
-    this.types.setVisible(!unit);
     this.matchup.setVisible(!unit);
   }
 
@@ -669,8 +738,9 @@ export class Hud {
     p.last = value;
     if (!p.pending || now - p.since < RES_POP_MS) return;
     const x = RES_POP[kind].x + String(value).length * 8 + 4;
-    const t = this.scene.add.bitmapText(x, 190, FONT, `+${p.pending}`).setTint(RES_POP[kind].tint).setDepth(10);
-    this.scene.tweens.add({ targets: t, y: 182, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
+    // Rises from the field's top edge into the top bar.
+    const t = this.scene.add.bitmapText(x, 30, FONT, `+${p.pending}`).setTint(RES_POP[kind].tint).setDepth(10);
+    this.scene.tweens.add({ targets: t, y: 22, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
     p.pending = 0;
   }
 

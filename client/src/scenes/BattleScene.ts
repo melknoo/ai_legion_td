@@ -14,7 +14,7 @@ import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
 import { SoloReport } from '../soloReport.ts';
-import { REROLL_SLOT, SEND_PAGE_SIZE, type SlotMode } from '../ui/Hud.ts';
+import { KING_SLOTS, REROLL_SLOT, SEND_PAGE_SIZE, type SlotMode } from '../ui/Hud.ts';
 import { SLOT_KEYS, onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { ME_COLOR, seatColor } from '../ui/playerColors.ts';
@@ -29,8 +29,8 @@ const VIEW_FIELD_W = CANVAS_W / FIELD_ZOOM;
 const VIEW_FIELD_H = (SHOWCASE ? SHOWCASE_FIELD.height : FIELD_H * UI_ZOOM) / FIELD_ZOOM;
 /** Ground drawn beyond the map's sides. */
 const FIELD_MARGIN = 48;
-/** The lane is 16 px shorter than the view: all of it goes above, where the top row's heads stick out. */
-const HEADROOM = 8;
+/** The lane is shorter than the view: all of the rest goes above, where the top row's heads stick out. */
+const HEADROOM = (VIEW_FIELD_H - LANE_PX.h) / 2;
 /** Ground above each area, so a centred view shows no dark gap; the rest of MAP_GAP stays dark as a divider. */
 const GROUND_TOP = HEADROOM * 2;
 /** Field labels in HUD-sized pixels (2 canvas px per font pixel); showcase clips keep their look. */
@@ -217,14 +217,10 @@ export class BattleScene extends Phaser.Scene {
       },
       actions: {
         pickSlot: (i) => this.slotKey(i),
-        setSlotMode: (mode) => this.setSlotMode(mode),
-        nextSendPage: () => this.nextSendPage(),
+        pickMode: (mode) => this.pickMode(mode),
         toggleTypeChart: () => this.ui.toggleTypeChart(),
         upgrade: (to) => this.upgradeSelected(to),
         sell: () => this.sellSelected(),
-        buyWorker: () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'),
-        upgradeFarm: () => this.upgradeFarm(),
-        upgradeKing: (stat) => this.upgradeKing(stat),
       },
       chat: this.session.chat,
       state: () => ({
@@ -397,9 +393,9 @@ export class BattleScene extends Phaser.Scene {
     SLOT_KEYS.forEach((k, i) => key(`keydown-${k}`, slot(i)));
     key('keydown-Z', slot(SLOT_KEYS.indexOf('Y')));
     key('keydown-N', () => this.nextSendPage());
-    key('keydown-ONE', () => this.setSlotMode('build'));
-    // A second press on 2 turns the send page.
-    key('keydown-TWO', () => (this.mode === 'send' ? this.nextSendPage() : this.setSlotMode('send')));
+    key('keydown-ONE', () => this.pickMode('build'));
+    key('keydown-TWO', () => this.pickMode('send'));
+    key('keydown-THREE', () => this.pickMode('king'));
     key('keydown-T', () => this.ui.toggleTypeChart());
     key('keydown-O', () => this.ui.toggleOptions());
     key('keydown-I', () => this.ui.toggleWavePreview());
@@ -412,15 +408,17 @@ export class BattleScene extends Phaser.Scene {
     // Space jumps home: own lane first, a second press to the own king.
     key('keydown-SPACE', (e: KeyboardEvent) => {
       e.preventDefault();
+      if (this.ui.introOpen) return;
       const game = this.session.game;
       this.setView(this.viewArea === this.me ? game.arenaOf(game.players[this.me]!.team) : this.me);
     });
-    key('keydown-ESC', () => (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
+    key('keydown-ESC', () => !this.ui.introOpen && (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
     key('keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
     key('keydown-U', () => this.upgradeSelected());
     key('keydown-DELETE', () => this.sellSelected());
     key('keydown-BACKSPACE', () => this.sellSelected());
-    key('keydown-B', () => this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1'));
+    // Tab 3's buys also work from the other tabs.
+    key('keydown-B', () => this.buyWorker());
     key('keydown-H', () => this.upgradeKing('hp'));
     key('keydown-J', () => this.upgradeKing('attack'));
     key('keydown-K', () => this.upgradeKing('regen'));
@@ -517,9 +515,20 @@ export class BattleScene extends Phaser.Scene {
     this.selectedBuild = null;
   }
 
-  /** A command card slot arms a fighter for placement or sends a merc, depending on the slot mode. */
+  /** Tab key or click; a second one on the send tab turns its page. */
+  private pickMode(mode: SlotMode): void {
+    if (mode === 'send' && this.mode === 'send') this.nextSendPage();
+    else this.setSlotMode(mode);
+  }
+
+  /** A command card slot arms a fighter for placement, sends a merc or buys an upgrade, depending on the slot mode. */
   private slotKey(i: number): void {
-    if (this.mode === 'send') {
+    if (this.mode === 'king') {
+      const what = KING_SLOTS[i];
+      if (what === 'worker') this.buyWorker();
+      else if (what === 'farm') this.upgradeFarm();
+      else if (what) this.upgradeKing(what);
+    } else if (this.mode === 'send') {
       const merc = this.sends()[this.sendPage * SEND_PAGE_SIZE + i];
       if (merc) this.feedback(this.session.send({ type: 'sendMerc', merc: merc.id }), `${merc.name.toUpperCase()} SENT!`, 'build');
     } else if (i === REROLL_SLOT && this.isProphet()) {
@@ -540,6 +549,10 @@ export class BattleScene extends Phaser.Scene {
 
   private nextSendPage(): void {
     this.sendPage = (this.sendPage + 1) % Math.ceil(this.sends().length / SEND_PAGE_SIZE);
+  }
+
+  private buyWorker(): void {
+    this.feedback(this.session.send({ type: 'buyWorker' }), 'WISP +1');
   }
 
   private upgradeFarm(): void {

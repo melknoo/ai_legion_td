@@ -6,7 +6,7 @@ import { seatColor, teamColor } from '../ui/playerColors.ts';
 export const LANE_PX = { w: LANE.width * SCALE, h: LANE.height * SCALE };
 export const ARENA_PX = { w: ARENA.width * SCALE, h: ARENA.height * SCALE };
 /** Field pixels above every area: a dark divider, then ground for the top row's heads and the area's name. */
-export const MAP_GAP = 24;
+export const MAP_GAP = 32;
 
 export interface MapSlot {
   area: number;

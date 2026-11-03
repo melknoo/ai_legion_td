@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import type { GameView, PlayerState } from '@legion/shared';
-import { FIELD_H, FIELD_TOP, VIEW_W } from '../layout.ts';
+import { FIELD_H, FIELD_TOP, HUD_H, HUD_Y, VIEW_W } from '../layout.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { ff6Window } from './ff6Window.ts';
+import { MINIMAP_BOX } from './Minimap.ts';
 import { TOUCH } from './touch.ts';
 
 const TIPS_KEY = 'legion.tips';
@@ -40,7 +41,9 @@ interface Tip {
 const building = (g: GameView) => g.phase === 'build';
 const fighting = (g: GameView) => g.phase === 'fight';
 const FIELD = { x: 2, y: FIELD_TOP, w: 476, h: FIELD_H };
-const GOLD = { x: 340, y: 186, w: 138, h: 24 };
+const GOLD = { x: 94, y: 2, w: 108, h: 21 };
+/** The command card's tabs, 1 to 3. */
+const tab = (i: number) => ({ x: 4, y: HUD_Y + 2 + i * 24, w: 46, h: 25 });
 
 /** Shown in this order, each once its game state comes up. */
 const TIPS: Tip[] = [
@@ -48,35 +51,35 @@ const TIPS: Tip[] = [
     id: 'build',
     lines: ['PICK FIGHTER, CLICK GRID'],
     touch: ['TAP FIGHTER, TAP GRID'],
-    spot: { x: 2, y: 186, w: 178, h: 84 },
+    spot: { x: 2, y: HUD_Y, w: 207, h: HUD_H },
     when: building,
   },
   { id: 'timer', lines: ['WAVE STARTS AT 0'], spot: { x: 2, y: 1, w: 80, h: 23 }, when: building },
   { id: 'gold', lines: ['GOLD BUYS FIGHTERS'], spot: GOLD, when: building },
-  { id: 'wisps', lines: ['WISPS (B) GATHER LUMBER'], touch: ['WISPS GATHER LUMBER'], spot: { x: 341, y: 222, w: 30, h: 46 }, when: building },
-  { id: 'sends', lines: ['SENDS (2) RAISE INCOME'], touch: ['SENDS RAISE INCOME'], spot: { x: 161, y: 187, w: 18, h: 30 }, when: building },
+  { id: 'wisps', lines: ['WISPS (3) GATHER LUMBER'], touch: ['WISPS (KING) GET LUMBER'], spot: tab(2), when: building },
+  { id: 'sends', lines: ['SENDS (2) RAISE INCOME'], touch: ['SENDS RAISE INCOME'], spot: tab(1), when: building },
   { id: 'leak', lines: ['GUARD THE RED LINE'], spot: FIELD, when: fighting },
   { id: 'kings', lines: ['KING HP, ENEMIES LEFT'], spot: { x: 250, y: 2, w: 228, h: 22 }, when: fighting },
-  { id: 'map', lines: ['CLICK MAP: OTHER LANES'], touch: ['TAP MAP: OTHER LANES'], spot: { x: 442, y: FIELD_TOP, w: 38, h: FIELD_H }, when: fighting },
+  { id: 'map', lines: ['CLICK MAP: OTHER LANES'], touch: ['TAP MAP: OTHER LANES'], spot: MINIMAP_BOX, when: fighting },
   {
     id: 'select',
     lines: ['CLICK FIGHTER: UPGRADE (U)'],
     touch: ['TAP FIGHTER: UPGRADE'],
-    spot: { x: 182, y: 186, w: 156, h: 84 },
+    spot: { x: 211, y: HUD_Y, w: 213, h: HUD_H },
     when: (g) => building(g) && g.wave >= 2,
   },
   {
     id: 'food',
-    lines: ['FOOD LOW: FARM (G)'],
-    touch: ['FOOD LOW: UPGRADE FARM'],
-    spot: { x: 370, y: 222, w: 28, h: 46 },
+    lines: ['FOOD LOW: FARM (3)'],
+    touch: ['FOOD LOW: FARM (KING)'],
+    spot: tab(2),
     when: (g, me) => building(g) && g.foodUsed(me.index) >= me.foodCap - 2,
   },
   {
     id: 'king',
-    lines: ['KING UPGRADES (H/J/K)'],
+    lines: ['KING UPGRADES (3)'],
     touch: ['UPGRADE YOUR KING'],
-    spot: { x: 396, y: 222, w: 82, h: 46 },
+    spot: tab(2),
     when: (g, me) => building(g) && g.wave >= 3 && me.lumber >= g.data.rules.king.upgradeLumber,
   },
 ];

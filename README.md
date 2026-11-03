@@ -33,21 +33,22 @@ npm run typecheck
 
 Controls (everything also works with the mouse via the HUD):
 - Command card `Q W E R` / `A S D F` / `Y X C V` (`Z` works for `Y` on QWERTY) or click a portrait: arm a fighter / send a merc; click a tile to place one, hold `Shift` to place several
-- `1` / `2` or the coin/log buttons: fighters (gold) or sends (lumber); `2` again (or `N`) turns the send page. Sends work in the build phase too, a running wave shows sends only
+- The command card has three tabs on its left: `1` BUILD (fighters for gold), `2` SEND (sends for lumber; `2` again, a click on the open tab or `N` turns the page) and `3` KING (wisp, farm and the king's HP/attack/regen upgrades). Sends work in the build phase too; each build phase opens on BUILD, each wave on SEND
 - Prophet (or the All Prophet mode): one random fighter per tier; `V` rerolls them (7 times, rising gold and lumber cost)
-- `T` or the `?` button: attack-vs-armor damage chart. Slot corners show attack type (icon) and armor (shield) in their type colours; a green/red backing means strong/weak against the coming wave
+- `T` or the `?` button in the info panel's corner: attack-vs-armor damage chart. Slot corners show attack type (icon) and armor (shield) in their type colours; a green/red backing means strong/weak against the coming wave
 - `I` or the wave button in the top bar (next to the king bars): pin the next wave's preview in the info panel; click again, `Esc` or selecting a unit unpins it
 - click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); a dashed red line and ring mark what the selected or hovered unit attacks; `U` upgrade, `Del` sell
 - damage numbers only show hits by your own units; your own units flash red when they are hit
 - `Esc` / right click: cancel placement and selection
-- `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen
+- `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen: the KING tab's buys, from any tab
 - `SPACE`: jump to my lane (again: my king)
 - `O` or the `O` button in the top bar: options (sound on/off, volume, screen shake, tips; turning tips back on replays them, HOW TO PLAY opens the rules pages); also on the title screen, which has its own HOW TO PLAY entry
 - Online: `Enter` team chat, `Shift+Enter` all chat (`Tab` switches while typing, `Esc` cancels); hotkeys pause while typing. The lobby has an all chat and a NAME button to rename yourself before the start
-- Every game opens with an intro card (who you are, team, goal); your own fighters, lane frame and names are gold, everyone else wears their team colour (WEST blue, EAST red)
-- The battlefield is one map with every area stacked top to bottom: your lane, ally lanes, your king, the arena battle, the foe king, foe lanes (`client/src/render/fieldMap.ts`). The view shows one whole lane at a time: mouse wheel, `↑`/`↓` or `TAB`/`Shift+TAB` step to the next area, the minimap in the field's right margin jumps there on click (drag to scroll; it settles on the nearest area). No edge scrolling
+- Every game opens with a short intro card (builder, team, goal in two lines); your own fighters, lane frame and names are gold, everyone else wears their team colour (WEST blue, EAST red)
+- The battlefield is one map with every area stacked top to bottom: your lane, ally lanes, your king, the arena battle, the foe king, foe lanes (`client/src/render/fieldMap.ts`). The view shows one whole lane at a time: mouse wheel, `↑`/`↓` or `TAB`/`Shift+TAB` step to the next area, the minimap (bottom right of the HUD, one bar per area) jumps there on click (drag to scroll; it settles on the nearest area). No edge scrolling
 - Creeps and sends are drawn at 0.75 of their size, so the fighters stand out
 - `R` restart after game over
+- Gold, lumber, income and food sit in the top bar; the HUD below the field holds the command card, the info panel and the minimap
 - Menus/HUD are laid out at 480x270 and drawn 2x on a 960x540 canvas, the field at 2x
 
 Phones and tablets (landscape; `client/src/ui/touch.ts`):

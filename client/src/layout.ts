@@ -12,7 +12,11 @@ export const CANVAS_H = SHOWCASE ? 1920 : VIEW_H * UI_ZOOM;
 
 /** Battlefield viewport between the top bar and the bottom panels (layout pixels). */
 export const FIELD_TOP = 25;
-export const FIELD_H = 160;
+/** One lane and the strip above it with its name (144 + 24 field px). */
+export const FIELD_H = 168;
+/** Bottom panels: command card, info, minimap. */
+export const HUD_Y = FIELD_TOP + FIELD_H;
+export const HUD_H = VIEW_H - HUD_Y;
 /** Canvas pixels per field pixel: at 2x the whole lane fits on screen, like the overview in Legion TD. */
 export const FIELD_ZOOM = 2;
 

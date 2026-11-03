@@ -6,23 +6,20 @@ const PATTERNS: Record<string, { rows: string[]; palette: Record<string, string>
     rows: ['...ddd.', '..dbbbd', '.dbbbdl', 'dbbbdll', 'dbbdll.', 'dbdll..', '.dd....'],
     palette: { d: '#5a3418', b: '#a0642c', l: '#e0b070' },
   },
-  'icon-sword': {
-    rows: ['......w', '.....w.', '....w..', '.g.w...', '..g....', '.g.g...', 'g......'],
-    palette: { w: '#e8eef8', g: '#d0a040' },
-  },
-  'icon-shield': {
-    rows: ['.bbbbb.', 'bwwbbbb', 'bwbbbbb', 'bbbbbbb', '.bbbbb.', '..bbb..', '...b...'],
-    palette: { b: '#6080d0', w: '#c8d8ff' },
-  },
-  // Range: a double-headed arrow, unlike the pierce attack icon.
-  'icon-range': {
-    rows: ['.......', '.......', '.w...w.', 'wwwwwww', '.w...w.', '.......', '.......'],
-    palette: { w: '#e8eef8' },
+  // Reach of a ranged attack: a drawn bow with its arrow.
+  'icon-bow': {
+    rows: ['..b.....', '.s.b....', 's...b.h.', 'aaaaaaah', 's...b.h.', '.s.b....', '..b.....'],
+    palette: { b: '#f0a048', s: '#e8e8f8', a: '#d8c8a8', h: '#ffffff' },
   },
   // Supply (food): a drumstick.
   'icon-food': {
     rows: ['..bbb..', '.bmmmb.', '.bmlmb.', '.bmmmb.', '..bmb..', '...w...', '..w.w..'],
     palette: { b: '#6a2c18', m: '#c8683a', l: '#f0a070', w: '#f0ead8' },
+  },
+  // King upgrades tab.
+  'icon-crown': {
+    rows: ['.......', 'y..y..y', 'yy.y.yy', 'yyyyyyy', 'ydyrydy', 'yyyyyyy', '.......'],
+    palette: { y: '#f8d048', d: '#b07818', r: '#e04848' },
   },
   // Damage and armor type icons, drawn light so they can be tinted per type.
   'type-normal': {
