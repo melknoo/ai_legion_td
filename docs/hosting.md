@@ -22,6 +22,14 @@ npm run deploy   # scripts/deploy-home.sh: typecheck + tests, upload, rebuild, h
 
 It deploys the working tree as it is, committed or not. Rebuilding restarts the game container: running games end (rooms are in memory). Run `npm test` and `npm run typecheck` first.
 
+Without the SSH alias (another PC), deploy on the laptop itself what is pushed to GitHub:
+
+```sh
+bash ~/legion-pixel/scripts/deploy-on-server.sh   # optional: a branch name, default main
+```
+
+It downloads the branch as a tarball (no git needed on the laptop), keeps `deploy/home/.env`, swaps the folder like `deploy-home.sh` and rebuilds; it runs no tests, so push only a checked state. A laptop copy from before this script existed can fetch it once: `curl -fsSL https://raw.githubusercontent.com/melknoo/ai_legion_td/main/scripts/deploy-on-server.sh | bash`.
+
 Caching (`server/src/static.ts`): the page is `no-cache`, Vite bundles are immutable, and the ~1900 sprite PNGs stay a day at Cloudflare and an hour in the browser, because pulling them through the Starlink uplink makes the first load slow. If a deploy changes existing sprite files, purge the Cloudflare cache for the zone (Caching → Purge Everything) or they stay stale for up to a day.
 
 ## Check
