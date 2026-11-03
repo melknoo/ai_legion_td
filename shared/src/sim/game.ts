@@ -6,6 +6,13 @@ import type { GameView } from './view.ts';
 import { STATUS, type AbilityDef, type AuraStat, type Buff, type BuffKind, type EffectKind } from './abilities.ts';
 
 export const TICK_MS = 50;
+/** Ranged shots fly this many world units per second; damage lands on impact. */
+export const SHOT_SPEED = 1000;
+
+/** How long a shot takes to cover `dist` world units (at least one tick). */
+export function shotFlightMs(dist: number): number {
+  return Math.max(TICK_MS, Math.round((dist / SHOT_SPEED) * 1000));
+}
 
 export interface PlayerConfig {
   id: string;
@@ -103,8 +110,8 @@ export type GameEvent =
   | { type: 'phase'; phase: Phase; wave: number; endsAtMs: number }
   | { type: 'spawn'; unitId: number }
   | { type: 'remove'; unitId: number }
-  /** x/y: the target's position, since a killing blow removes the target before clients see the event. */
-  | { type: 'attack'; unitId: number; targetId: number; x: number; y: number }
+  /** x/y: the target's position at the swing; flightMs: until a shot lands (0 for melee and kings). */
+  | { type: 'attack'; unitId: number; targetId: number; x: number; y: number; flightMs: number }
   // Damage and death carry the position so clients can show effects even if the unit is already gone.
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; area: number; x: number; y: number }
   | { type: 'death'; unitId: number; killerId: number | null; area: number; x: number; y: number }
@@ -124,6 +131,21 @@ const NO_AURA: Record<AuraStat, number> = { damage: 0, armor: 0, attackSpeed: 0,
 /** Bosses keep stuns and slows only this long (the original: "reduced greatly on bosses"). */
 const BOSS_CC_FACTOR = 0.25;
 const POISON_STEP_MS = 500;
+/**
+ * A unit within this many world units of its reach counts as in range. Allies jostle a unit
+ * standing exactly at reach a little outward every tick, which kept melee from ever swinging.
+ */
+const ENGAGE_SLACK = 8;
+
+/** A ranged attack in flight; it hits when it lands, or fizzles if the target died or left. */
+interface Shot {
+  source: UnitState;
+  targetId: number;
+  area: number;
+  landsAtMs: number;
+  ratio: number;
+  primary: boolean;
+}
 
 export class Game implements GameView {
   readonly data: GameData;
@@ -156,6 +178,7 @@ export class Game implements GameView {
   private nextFinaleBatchMs = 0;
   /** Aura bonuses per unit, recomputed every fight tick. */
   private readonly auras = new Map<number, Record<AuraStat, number>>();
+  private shots: Shot[] = [];
 
   constructor(config: GameConfig) {
     this.data = config.data;
@@ -489,6 +512,7 @@ export class Game implements GameView {
       u.readyAt = [];
       u.status = 0;
     }
+    this.shots = [];
   }
 
   /** Kings regenerate outside fights too (fights tick regen for every unit in stepFight). */
@@ -530,6 +554,7 @@ export class Game implements GameView {
     const dt = TICK_MS / 1000;
     const area = this.battleArena();
     this.computeAuras();
+    this.landShots();
     for (const u of [...this.units.values()]) {
       if (u.dead || u.area !== area) continue;
       u.cooldownMs = Math.max(0, u.cooldownMs - TICK_MS);
@@ -586,6 +611,7 @@ export class Game implements GameView {
     const dt = TICK_MS / 1000;
     this.spawnWave();
     this.computeAuras();
+    this.landShots();
     for (const u of [...this.units.values()]) {
       if (u.dead) continue;
       const def = this.def(u);
@@ -651,7 +677,7 @@ export class Game implements GameView {
     u.targetId = target.id;
     const reach = def.attack.range + def.radius + this.def(target).radius;
     const dist = Math.hypot(target.x - u.x, target.y - u.y);
-    if (dist > reach) {
+    if (dist > reach + ENGAGE_SLACK) {
       this.moveTowards(u, target.x, target.y, Math.min(step, dist - reach));
       return;
     }
@@ -659,8 +685,7 @@ export class Game implements GameView {
     if (u.cooldownMs > 0) return;
     const speed = 1 + u.mods.attackSpeed + this.aura(u).attackSpeed - slow;
     u.cooldownMs = def.attack.cooldownMs / Math.max(0.2, speed);
-    this.events.push({ type: 'attack', unitId: u.id, targetId: target.id, x: target.x, y: target.y });
-    this.hit(u, target);
+    this.strike(u, target);
     // Multishot: extra enemies within reach take a weaker hit.
     for (const a of this.abilitiesOf(u)) {
       if (a.kind !== 'multishot') continue;
@@ -670,11 +695,32 @@ export class Game implements GameView {
         .filter(({ d }) => d <= def.attack.range + def.radius)
         .sort((p, q) => p.d - q.d)
         .slice(0, a.targets);
-      for (const { o } of extra) {
-        this.events.push({ type: 'attack', unitId: u.id, targetId: o.id, x: o.x, y: o.y });
-        this.hit(u, o, a.ratio, false);
-      }
+      for (const { o } of extra) this.strike(u, o, a.ratio, false);
     }
+  }
+
+  /** Melee and kings hit at once; ranged attacks launch a shot that deals its damage on impact. */
+  private strike(u: UnitState, target: UnitState, ratio = 1, primary = true): void {
+    const shoots = u.kind !== 'king' && this.def(u).attack.range > MELEE_RANGE;
+    const flightMs = shoots ? shotFlightMs(Math.hypot(target.x - u.x, target.y - u.y)) : 0;
+    this.events.push({ type: 'attack', unitId: u.id, targetId: target.id, x: target.x, y: target.y, flightMs });
+    if (!shoots) return this.hit(u, target, ratio, primary);
+    this.shots.push({ source: u, targetId: target.id, area: target.area, landsAtMs: this.timeMs + flightMs, ratio, primary });
+  }
+
+  /** Shots due this tick hit; a target that died, leaked or warped meanwhile lets them fizzle. */
+  private landShots(): void {
+    if (!this.shots.length) return;
+    const flying: Shot[] = [];
+    for (const s of this.shots) {
+      if (s.landsAtMs > this.timeMs) {
+        flying.push(s);
+        continue;
+      }
+      const target = this.units.get(s.targetId);
+      if (target && !target.dead && target.area === s.area) this.hit(s.source, target, s.ratio, s.primary);
+    }
+    this.shots = flying;
   }
 
   private acquireTarget(u: UnitState): UnitState | null {

@@ -129,10 +129,20 @@ export function weaponSwing(scene: Phaser.Scene, trails: SwingTrails, key: Weapo
 /** Glowing projectiles; solid ones (rock, cannonball, leaves, steel) keep normal blending. */
 const GLOW_SHOTS = new Set<string>(['energy', 'fireball', 'icespike']);
 
-/** Projectile flying from attacker to target in the attacker's style; `onHit` runs where it lands. Returns the flight time. */
-export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, y0: number, x1: number, y1: number, onHit?: () => void): number {
-  const angle = Math.atan2(y1 - y0, x1 - x0);
-  const duration = Math.max(60, Math.hypot(x1 - x0, y1 - y0) * 4);
+/**
+ * Projectile flying from attacker to target in the attacker's style for the sim's flight time. It
+ * follows `aim` (the target as drawn) so it lands on the sprite; `onHit` runs where it lands.
+ */
+export function projectile(
+  scene: Phaser.Scene,
+  style: AttackStyle,
+  x0: number,
+  y0: number,
+  aim: () => { x: number; y: number },
+  duration: number,
+  onHit?: (x: number, y: number) => void,
+): void {
+  let { x: x1, y: y1 } = aim();
   const shot = style.shot ?? 'arrow';
   let obj: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
   if (shot === 'arrow' || shot === 'kunai') obj = scene.add.image(x0, y0, shot);
@@ -145,7 +155,7 @@ export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, 
   if (style.tint !== undefined) obj.setTint(style.tint);
   // Round shots don't point anywhere; shuriken spin by their own frames.
   const round = shot === 'cannon' || shot === 'rock' || shot === 'shuriken';
-  obj.setDepth(glow ? 10000.5 : 10000).setRotation(round ? 0 : angle).setFlipX(round && x1 < x0);
+  obj.setDepth(glow ? 10000.5 : 10000).setRotation(round ? 0 : Math.atan2(y1 - y0, x1 - x0)).setFlipX(round && x1 < x0);
   // Cannonballs and rocks arc; everything else flies straight.
   const arc = shot === 'cannon' || shot === 'rock' ? Math.min(20, Math.abs(x1 - x0) / 4) : 0;
   const path = { t: 0 };
@@ -153,11 +163,16 @@ export function projectile(scene: Phaser.Scene, style: AttackStyle, x0: number, 
     targets: path,
     t: 1,
     duration,
-    onUpdate: () => obj.setPosition(x0 + (x1 - x0) * path.t, y0 + (y1 - y0) * path.t - Math.sin(path.t * Math.PI) * arc),
+    onUpdate: () => {
+      ({ x: x1, y: y1 } = aim());
+      const x = x0 + (x1 - x0) * path.t;
+      const y = y0 + (y1 - y0) * path.t - Math.sin(path.t * Math.PI) * arc;
+      if (!round) obj.setRotation(Math.atan2(y - obj.y, x - obj.x) || obj.rotation);
+      obj.setPosition(x, y);
+    },
     onComplete: () => {
       obj.destroy();
-      onHit?.();
+      onHit?.(x1, y1);
     },
   });
-  return duration;
 }

@@ -343,7 +343,7 @@ describe('wire protocol', () => {
   it('round-trips visual events', async () => {
     const { decodeEvents, encodeEvents } = await import('../net/protocol.ts');
     const events: GameEvent[] = [
-      { type: 'attack', unitId: 3, targetId: 9, x: 100, y: 40 },
+      { type: 'attack', unitId: 3, targetId: 9, x: 100, y: 40, flightMs: 450 },
       { type: 'damage', sourceId: 3, targetId: 9, amount: 12, area: 1, x: 100, y: 40 },
       { type: 'death', unitId: 9, killerId: null, area: 1, x: 100, y: 40 },
       { type: 'leak', unitId: 5, player: 2 },
@@ -503,6 +503,50 @@ describe('abilities', () => {
     expect(engagedX).not.toBeNull();
     // Creeps march in +x; being shoved would carry the sprout that way.
     expect(maxX - engagedX!).toBeLessThan(2);
+  });
+
+  it('ranged damage lands when the shot arrives, not when it leaves', () => {
+    const g = withArcher([]);
+    const shot = runUntil(g, (ev) => ev.some((e) => e.type === 'attack' && e.unitId === archerId(g))).find(
+      (e): e is Extract<GameEvent, { type: 'attack' }> => e.type === 'attack' && e.unitId === archerId(g),
+    )!;
+    expect(shot.flightMs).toBeGreaterThan(0);
+    const target = g.units.get(shot.targetId)!;
+    const hp = target.hp;
+    const firedAt = g.timeMs;
+    let landed: GameEvent[] = [];
+    while (!damageBy(landed, archerId(g)).length && g.timeMs - firedAt < 5000) {
+      expect(target.hp).toBe(hp);
+      landed = g.tick();
+    }
+    expect(g.timeMs - firedAt).toBeGreaterThanOrEqual(shot.flightMs);
+    const flight = landed;
+    expect(damageBy(flight, archerId(g))[0]?.targetId).toBe(shot.targetId);
+  });
+
+  it('a shot fizzles when its target dies on the way', () => {
+    const g = withArcher([]);
+    const shot = runUntil(g, (ev) => ev.some((e) => e.type === 'attack' && e.unitId === archerId(g))).find(
+      (e): e is Extract<GameEvent, { type: 'attack' }> => e.type === 'attack' && e.unitId === archerId(g),
+    )!;
+    g.units.get(shot.targetId)!.dead = true;
+    const later: GameEvent[] = [];
+    for (let i = 0; i < shot.flightMs / 50 + 2; i++) later.push(...g.tick());
+    expect(damageBy(later, archerId(g)).some((e) => e.targetId === shot.targetId)).toBe(false);
+  });
+
+  it('melee crowded by allies still reaches and fights its target', () => {
+    const data = testData();
+    // A pack of sprouts gangs up on one immortal, harmless creep that shoots from afar and so stands still.
+    data.waves[0] = { ...data.waves[0]!, count: 1 };
+    data.units.grub = { ...data.units.grub!, hp: 1_000_000, attack: { ...data.units.grub!.attack, damage: [0, 0], range: 400 } };
+    data.rules = { ...data.rules, startGold: 10_000 };
+    const g = newGame(data);
+    for (let col = 0; col < 2; col++) for (let row = 0; row < 9; row++) g.apply({ type: 'build', player: 0, unit: 'sprout', col, row });
+    runUntil(g, phaseIs('fight'));
+    const swung = new Set<number>();
+    for (let i = 0; i < 1200; i++) for (const e of g.tick()) if (e.type === 'attack') swung.add(e.unitId);
+    for (const f of fightersOf(g, 0)) expect(swung.has(f.id)).toBe(true);
   });
 
   it('bosses keep stuns only a quarter as long', () => {

@@ -99,8 +99,6 @@ export class BattleScene extends Phaser.Scene {
   /** Online builds appear with the next state patch; select them once they do. */
   private pendingSelect: { col: number; row: number; until: number } | null = null;
   private views = new Map<number, UnitView>();
-  /** When this frame's shots land, by "source:target"; their damage flashes and numbers wait for it. */
-  private readonly landing = new Map<string, number>();
   /** Where every lane and arena sits on the scrollable map. */
   private map!: FieldMap;
   /** Areas on screen this frame: only their units are drawn and only their events make effects and sound. */
@@ -254,8 +252,6 @@ export class BattleScene extends Phaser.Scene {
     // Showcase clips hurry through the build phases, which make dull footage.
     const speed = SHOWCASE && this.session.game.phase === 'build' ? SHOWCASE_FIELD.buildSpeed : 1;
     const events = holdClip() ? [] : this.session.update(delta * speed);
-    // A tick's attack and the damage it deals arrive together, so landings only live for one frame.
-    this.landing.clear();
     for (const ev of events) this.handleEvent(ev);
     if (!holdClip()) this.updateCamera(delta / 1000);
     this.updateShown();
@@ -884,8 +880,14 @@ export class BattleScene extends Phaser.Scene {
         sfx(this, ranged ? SHOT_SOUND[shot.shot ?? 'arrow'] : (FX_SOUND[impact ?? 'cut'] ?? 'hit'));
         if (!ranged) this.playFx(impact ?? 'cut', to.x, to.y - 6);
         else {
-          const flight = projectile(this, shot, from.x + 6 * dir, from.y - 8, to.x, to.y - 6, impact && (() => this.playFx(impact, to.x, to.y - 6, 0.7)));
-          this.landing.set(`${a.id}:${ev.targetId}`, this.time.now + flight);
+          // The sim deals the damage when the shot lands, so fly for exactly that long.
+          const area = a.area;
+          const aim = () => {
+            const p = game.units.get(ev.targetId)?.area === area ? this.session.interpolated(ev.targetId) : null;
+            const q = p ? this.toField(area, p.x, p.y) : to;
+            return { x: q.x, y: q.y - 6 };
+          };
+          projectile(this, shot, from.x + 6 * dir, from.y - 8, aim, ev.flightMs, impact && ((x, y) => this.playFx(impact, x, y, 0.7)));
         }
         return;
       }
@@ -899,21 +901,15 @@ export class BattleScene extends Phaser.Scene {
         // crowded lane shows what your fighters deal (showcase clips keep them all).
         const flash = t.owner === this.me ? HURT_FLASH : 0xffffff;
         const digits = SHOWCASE || game.units.get(ev.sourceId)?.owner === this.me;
-        const show = () => {
-          // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
-          if (this.views.get(ev.targetId) === view && this.time.now > view.flashUntil + FLASH_GAP_MS) {
-            view.sprite.setTint(flash).setTintMode(Phaser.TintModes.FILL);
-            view.flashUntil = this.time.now + 70;
-          }
-          if (!digits) return;
-          const p = this.session.interpolated(ev.targetId) ?? at;
-          const s = this.toField(area, p.x, p.y);
-          this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
-        };
-        // Ranged hits show when the shot lands, not when it leaves the bow.
-        const wait = (this.landing.get(`${ev.sourceId}:${ev.targetId}`) ?? 0) - this.time.now;
-        if (wait > 0) this.time.delayedCall(wait, show);
-        else show();
+        // Flash at most every few frames: a swarmed unit would otherwise stay a white blob.
+        if (this.time.now > view.flashUntil + FLASH_GAP_MS) {
+          view.sprite.setTint(flash).setTintMode(Phaser.TintModes.FILL);
+          view.flashUntil = this.time.now + 70;
+        }
+        if (!digits) return;
+        const p = this.session.interpolated(ev.targetId) ?? at;
+        const s = this.toField(area, p.x, p.y);
+        this.damageNumber(s.x, s.y - 18, Math.round(ev.amount));
         return;
       }
       case 'death': {
