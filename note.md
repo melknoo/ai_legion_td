@@ -1,3 +1,14 @@
 
 -man sieht zur zeit nur wie viele wisps man hat wenn man über die hovert
 -ready button, wenn alle sagen sie sind ready, startet die runde sofort
+-thorns hat noch n bug: 0dmg bei frühen waves
+-mehr als ein upgrade
+-einheiten die von der aura betroffen sind, dass muss irgendwie sichtbar sein
+-zur zeit gibt es nur wenige der abillities von legion td also multishot usw. Was ist zB mit summons, die sind gar nicht mit drin. 
+-neuer multiplayer mode, prophet aber nach jeder runde ändern sich die units
+-was ist eigentlich mit aura speed gemeint? attack speed oder movement speed? Und kann man das auch irgendwo sehen, wieviel davon eine einheit hat?
+-bei arena battle west and east, die anzahl der einheiten anzeigen also statt lebende gegner einfach die eigenen einheiten bzw die der gegner nehmen
+-einzelne effekte sind etwas zu groß, sodass man nicht sieht was im kampf passiert
+-wie lange haben fähigkeiten wie nova cd? eventuell mana einführen?
+-die bögen sind noch zur falschen seite
+-gegner brauchen nach dem leak noch länger bis sie beim könig ankommen, sonst ist der leak schon am kämpfen gegen den könig während andere noch ihre wave bekämpfen
