@@ -14,7 +14,9 @@
       "legion td",
       "multiplayer"
     ],
-    "playlist": null
+    "playlist": null,
+    "videoId": "7QaJUATmbB0",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss10-grove-s7",
@@ -31,7 +33,9 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "EBBypkUOTyY",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss10-frost-s2",
@@ -48,7 +52,9 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "MS5itYsEWwY",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss20-warclan-s9",
@@ -65,7 +71,9 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "8kySJCc3Fd4",
+    "retired": "2026-11-04"
   },
   {
     "id": "melt15-grove-s17",
@@ -82,7 +90,9 @@
       "legion td",
       "satisfying"
     ],
-    "playlist": "Satisfying"
+    "playlist": "Satisfying",
+    "videoId": "FPFfnJB2uxA",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss10-tidal-s11",
@@ -99,7 +109,9 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "mcVy7mjTcd8",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss20-canopy-s15",
@@ -116,7 +128,9 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "UPaNG_6AAU4",
+    "retired": "2026-11-04"
   },
   {
     "id": "boss10-clockwork-s7",
@@ -125,6 +139,144 @@
     "publishAt": "2026-11-09T17:30:00+01:00",
     "title": "Clockwork vs. the first boss #shorts",
     "description": "Clockwork vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
+    "playlist": "Boss moments",
+    "videoId": "5m1iAheCQZM",
+    "retired": "2026-11-04"
+  },
+  {
+    "id": "v2-trailer-canopy-s4-w25",
+    "clip": "2026-11-04-trailer-canopy-w25.mp4",
+    "recipe": "?showcase&builder=canopy&seed=4&wave=25&title=18+builders+232+fighters+31+waves&rec&from=5&len=25",
+    "publishAt": "2026-11-04T19:00:00+01:00",
+    "title": "Legion Pixel – free tower defense in your browser #shorts",
+    "description": "18 builders, 232 fighters, 31 waves. A free multiplayer tower defense in your browser: build your lane, send mercenaries, defend your king – solo against bots or online, 1v1 up to 4v4.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "multiplayer"
+    ],
+    "playlist": null
+  },
+  {
+    "id": "v2-boss10-warclan-s3",
+    "clip": "2026-11-05-short-warclan-boss10.mp4",
+    "recipe": "?showcase&builder=warclan&seed=3&wave=10&title=Can+Warclan+beat+the+first+boss%3F&rec",
+    "publishAt": "2026-11-05T17:30:00+01:00",
+    "title": "Can Warclan beat the first boss? #shorts",
+    "description": "Warclan vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
+    "playlist": "Boss moments"
+  },
+  {
+    "id": "v2-melt15-abyss-s4",
+    "clip": "2026-11-06-short-abyss-melt15.mp4",
+    "recipe": "?showcase&builder=abyss&seed=4&wave=15&title=Watch+the+whole+wave+melt&rec",
+    "publishAt": "2026-11-06T17:30:00+01:00",
+    "title": "Watch the whole wave melt #shorts",
+    "description": "Wave 15 against an Abyss lane.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "satisfying"
+    ],
+    "playlist": "Satisfying"
+  },
+  {
+    "id": "v2-fail9-clockwork-s2",
+    "clip": "2026-11-07-short-clockwork-fail9.mp4",
+    "recipe": "?showcase&builder=clockwork&seed=2&wave=9&title=Can+Clockwork+survive+wave+9%3F&rec",
+    "publishAt": "2026-11-07T17:30:00+01:00",
+    "title": "Can Clockwork survive wave 9? #shorts",
+    "description": "Clockwork vs. wave 9. It did not go well.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "fail"
+    ],
+    "playlist": "Fails"
+  },
+  {
+    "id": "v2-boss20-canopy-s4",
+    "clip": "2026-11-08-short-canopy-boss20.mp4",
+    "recipe": "?showcase&builder=canopy&seed=4&wave=20&title=Can+Canopy+hold+three+bosses%3F&rec",
+    "publishAt": "2026-11-08T17:30:00+01:00",
+    "title": "Can Canopy hold three bosses? #shorts",
+    "description": "Wave 20 sends three bosses down the lane. Canopy was ready.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
+    "playlist": "Boss moments"
+  },
+  {
+    "id": "v2-boss10-chimera-s15",
+    "clip": "2026-11-09-short-chimera-boss10.mp4",
+    "recipe": "?showcase&builder=chimera&seed=15&wave=10&title=Random+eggs+vs+the+boss&rec",
+    "publishAt": "2026-11-09T17:30:00+01:00",
+    "title": "Random eggs vs. the boss #shorts",
+    "description": "Chimera eggs hatch into a random fighter of the same tier. Enough to stop the wave 10 boss?\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
+    "playlist": "Boss moments"
+  },
+  {
+    "id": "v2-boss10-primal-s3",
+    "clip": "2026-11-10-short-primal-boss10.mp4",
+    "recipe": "?showcase&builder=primal&seed=3&wave=10&title=Will+the+boss+get+through%3F&rec",
+    "publishAt": "2026-11-10T17:30:00+01:00",
+    "title": "Will the boss get through? #shorts",
+    "description": "Primal vs. the wave 10 boss. So close.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
+    "tags": [
+      "tower defense",
+      "pixel art",
+      "indie game",
+      "browser game",
+      "legion td",
+      "boss fight"
+    ],
+    "playlist": "Boss moments"
+  },
+  {
+    "id": "v2-boss10-abyss-s4",
+    "clip": "2026-11-11-short-abyss-boss10.mp4",
+    "recipe": "?showcase&builder=abyss&seed=4&wave=10&title=Will+Abyss+hold+the+boss%3F&rec",
+    "publishAt": "2026-11-11T17:30:00+01:00",
+    "title": "Will Abyss hold the boss? #shorts",
+    "description": "Abyss vs. the wave 10 boss.\n\nLegion Pixel is a free multiplayer tower defense in your browser, inspired by the WC3 classic Legion TD Mega (fan project, not affiliated with Blizzard).\nPlay free: legion.schleiweb.de/?ref=yt",
     "tags": [
       "tower defense",
       "pixel art",
