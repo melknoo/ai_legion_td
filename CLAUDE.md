@@ -41,6 +41,7 @@ Personal browser remake of the WC3 map *Legion TD Mega*: online multiplayer, sid
 `npm test` (Vitest, sim) and `npm run typecheck` must stay clean; check visual changes in the browser (no console errors).
 
 ## Open
+- Long-term themes (standalone, roguelike campaign, mobile app, Steam): `docs/roadmap.md`.
 - Balance: bots leak a lot around waves 5–10 even with roughly the original recommended army value; bot-vs-bot games end around wave 10. Unclear whether the sim is harder than the original or the bot builds badly – needs the owner's feel from playing.
 - External VFX packs (candidate: Foozle "Pixel Magic Effects", CC0) – waiting for the owner's OK.
 - Mobile: first version is in (PWA, touch controls, see README). Not yet checked on a real phone/tablet; desktop Chrome has no touch, so tests feed touch events into `game.input.onTouchStart/Move/End`. Command-card slots on phones are ~55x33 CSS px, MiniButtons were enlarged for touch only. Possible next steps: Play Store via TWA (Bubblewrap), bigger touch layout after the WC3-style HUD rework.
