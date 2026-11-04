@@ -17,7 +17,7 @@ import {
 } from '@legion/shared';
 import { builderPortrait } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
-import { serverUrl } from '../net/server.ts';
+import { publicUrl, serverUrl } from '../net/server.ts';
 import { ChatLog } from '../net/ChatLog.ts';
 import { clearRejoin, rejoinToken, saveRejoin } from '../net/rejoin.ts';
 import { NetSession } from '../session/NetSession.ts';
@@ -321,7 +321,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private copyLink(): void {
     if (!this.room) return;
-    const link = `${location.origin}${location.pathname}?room=${this.room.roomId}`;
+    const link = `${publicUrl()}?room=${this.room.roomId}`;
     // The clipboard API needs a secure context (localhost or https); plain LAN http falls back to the code.
     navigator.clipboard?.writeText(link).then(
       () => this.showError('LINK COPIED!'),

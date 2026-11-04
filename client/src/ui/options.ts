@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { desktop } from '../desktop.ts';
 import { FONT } from '../scenes/BootScene.ts';
 import { settings, updateSettings } from '../settings.ts';
 import { ff6Window } from './ff6Window.ts';
@@ -35,6 +36,10 @@ export const OPTION_ITEMS: OptionItem[] = [
   },
   { label: () => `SCREEN SHAKE < ${onOff(settings().shake)} >`, change: () => updateSettings({ shake: !settings().shake }) },
   { label: () => `TIPS         < ${onOff(tipsEnabled())} >`, change: () => setTipsEnabled(!tipsEnabled()) },
+  // Desktop app only: the browser has its own fullscreen (F11) and the PWA opens fullscreen anyway.
+  ...(desktop
+    ? [{ label: () => `FULLSCREEN   < ${onOff(desktop!.isFullscreen())} >`, change: () => desktop!.setFullscreen(!desktop!.isFullscreen()) }]
+    : []),
 ];
 
 const W = 196;

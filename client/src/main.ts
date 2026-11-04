@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DESKTOP } from './desktop.ts';
 import { installErrorReporting } from './errorReport.ts';
 import { CANVAS_H, CANVAS_W } from './layout.ts';
 import { BattleScene } from './scenes/BattleScene.ts';
@@ -13,8 +14,9 @@ import { installTouchShell } from './ui/touch.ts';
 if (import.meta.env.PROD) installErrorReporting();
 
 // Installable app (PWA): the service worker caches page and sprites, so solo games also run
-// offline. Not in dev, where it would get in the way of Vite's hot reload.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// offline. Not in dev, where it would get in the way of Vite's hot reload, and not in the desktop
+// app, which has every file on disk already.
+if (import.meta.env.PROD && !DESKTOP && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 installTouchShell();

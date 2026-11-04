@@ -1,5 +1,8 @@
 // Production builds report uncaught errors to the game server (/client-error), which logs
 // them and lists them on its stats page. A handful per page load is enough to spot a bug.
+
+import { serverUrl } from './net/server.ts';
+
 const MAX_REPORTS = 5;
 
 let sent = 0;
@@ -7,7 +10,7 @@ let sent = 0;
 function report(message: string, source: string, stack: string): void {
   if (sent++ >= MAX_REPORTS) return;
   const body = JSON.stringify({ message: message.slice(0, 300), source: source.slice(0, 200), stack: stack.slice(0, 1500) });
-  fetch('/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {
+  fetch(`${serverUrl()}/client-error`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {
     // Nowhere left to report to; the game keeps running.
   });
 }

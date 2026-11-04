@@ -1,4 +1,5 @@
 import type { GameView } from '@legion/shared';
+import { serverUrl } from './net/server.ts';
 import type { SoloConfig } from './session/LocalSession.ts';
 
 // Solo games run in the browser, so production builds tell the game server (/solo) when one
@@ -45,7 +46,7 @@ export class SoloReport {
       timeMs: Math.round(g.timeMs),
       ...extra,
     });
-    fetch('/solo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {
+    fetch(`${serverUrl()}/solo`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {
       // Offline or no server: the game doesn't depend on it.
     });
   }

@@ -58,6 +58,22 @@ Phones and tablets (landscape; `client/src/ui/touch.ts`):
 - name, room code and chat use a hidden DOM input over the field, so the on-screen keyboard opens; in the game the `C` button next to `O` opens the chat, in the lobby tap the CHAT heading
 - installable as a PWA ("Add to home screen"): `client/public/manifest.webmanifest`, service worker `client/public/sw.js` (production builds only, one cache per build, solo games also start offline). Icons come from `node tools/make-icons.mjs`
 
+## Desktop app (Windows)
+
+`desktop/` wraps the client in Electron: solo games run without any server, online games connect to `https://legion.schleiweb.de`. It is a separate npm package (not a workspace), so Electron stays out of the server image.
+
+```sh
+npm --prefix desktop install   # once; downloads the Electron binary (~100 MB)
+npm run desktop                # builds the client (vite --mode desktop) into desktop/app and starts the app
+npm run desktop:dist           # NSIS installer + portable .exe in desktop/release (build on Windows)
+```
+
+- The page is served from `app://legion/` (`desktop/src/main.cjs`); settings and name live in the app's localStorage under `%APPDATA%/Legion Pixel`, the window size in `window.json` there.
+- Game server: OPTIONS → SERVER in the title menu (address or LAN IP such as `192.168.1.5:2567`, empty = official), or `--server=URL` on the command line, which wins.
+- F11 or Alt+Enter toggles fullscreen (also OPTIONS → FULLSCREEN); no menu bar, so Ctrl+R/Ctrl+W do nothing. F12 opens the developer tools when run from source.
+- The build is not code-signed: Windows SmartScreen warns on the first start ("More info" → "Run anyway").
+- itch.io: `butler push desktop/release/LegionPixel-<version>-portable.exe <user>/<game>:windows` (butler from itch.io, logged in once with `butler login`).
+
 ## Hosting
 
 The server can serve the built client itself (`CLIENT_DIR`), so one process on one port runs page and game:

@@ -12,7 +12,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "dev": "npm run dev -w @legion/client",
     "dev:server": "npm run dev -w @legion/server",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "desktop": "npm --prefix desktop start",
+    "desktop:dist": "npm --prefix desktop run dist"
   },
   "devDependencies": {
     "typescript": "7.0.2",

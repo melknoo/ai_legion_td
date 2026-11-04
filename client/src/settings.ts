@@ -4,10 +4,12 @@ export interface Settings {
   /** Effects volume 0..1. */
   volume: number;
   shake: boolean;
+  /** Desktop app: game server address; empty = the official one (`net/server.ts`). */
+  server: string;
 }
 
 const KEY = 'legion.settings';
-const DEFAULTS: Settings = { sound: true, volume: 0.6, shake: true };
+const DEFAULTS: Settings = { sound: true, volume: 0.6, shake: true, server: '' };
 
 let current: Settings | null = null;
 

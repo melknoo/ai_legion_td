@@ -10,13 +10,15 @@ Langfristige Themen, nach und nach umzusetzen. Reihenfolge: Standalone → Kampa
 
 ## Phase 1 – Standalone Desktop (.exe / Installer)
 
-- **Hülle:** Electron (empfohlen: gleiches Chromium wie die Browsertests, WebGL stabil, später `steamworks.js`). Alternative Tauri (kleiner, aber WebView2-Performance je nach System unterschiedlich).
-- **Offline:** `LocalSession` läuft schon komplett im Browser → Solo vs Bots ohne Server.
-- **Online:** `NetSession` verbindet in Prod-Builds zum eigenen Origin → Server-URL konfigurierbar machen (Default `legion.schleiweb.de`); der Server muss WS/HTTP aus der App erlauben (Origin/CORS prüfen).
-- **Packaging:** electron-builder → NSIS-Installer + portable .exe. Offen: Code-Signing (ohne Zertifikat zeigt Windows eine SmartScreen-Warnung).
+**Stand:** umgesetzt mit Electron in `desktop/` (Details im README, Abschnitt „Desktop app“).
+
+- **Hülle:** Electron 44 (gleiches Chromium wie die Browsertests, später `steamworks.js`). Der Client wird mit `vite build --mode desktop` gebaut und von `app://legion/` geladen; `DESKTOP` (`client/src/desktop.ts`) schaltet die Unterschiede.
+- **Offline:** Solo vs Bots läuft ohne Server (kein Service Worker nötig, alle Dateien liegen lokal).
+- **Online:** Default `https://legion.schleiweb.de`, umstellbar unter OPTIONS → SERVER oder per `--server=URL`. Der Server brauchte keine Änderung: Colyseus erlaubt jede Origin (CORS inkl. Preflight, auch für `/rooms`, `/client-error`, `/solo`). Einladungslinks zeigen auf die Server-URL statt `app://`.
+- **Packaging:** electron-builder → NSIS-Installer + portable .exe (`npm run desktop:dist`, unter Windows bauen). Ohne Code-Signing → SmartScreen-Warnung beim ersten Start.
+- **Fenster:** Größe/Vollbild werden gemerkt, F11/Alt+Enter oder OPTIONS → FULLSCREEN; kein Menü (Ctrl+R/Ctrl+W stören keine Hotkeys).
 - **Speicherstände:** Settings in localStorage reichen vorerst; für die Kampagne später eine echte Save-Datei im App-Datenordner.
-- **Verteilung:** zuerst über itch.io (Seite existiert, Upload per butler).
-- **Prüfen:** Service Worker/PWA im App-Kontext, Asset-Pfade, Vollbild/Fenstermodus, Hotkeys.
+- **Offen:** Code-Signing (Zertifikat ja/nein), erster Upload auf itch.io per butler (Befehl im README), Test auf echten Windows-Rechnern (Grafiktreiber, HiDPI), Auto-Update (z. B. electron-updater) erst bei Bedarf.
 
 ## Phase 2 – Roguelike-Kampagne (neuer Modus)
 
@@ -52,7 +54,7 @@ Bestehende offene Punkte, Details in `CLAUDE.md` („Open“): Balance Wellen 5�
 
 ## Entscheidungspunkte
 
-- Electron vs. Tauri (vor Phase 1)
+- ~~Electron vs. Tauri~~ → Electron
 - Code-Signing ja/nein
 - Kampagne: Koop, Run-Länge, Incremental-Schicht
 - TWA vs. Capacitor
