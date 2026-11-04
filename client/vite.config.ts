@@ -20,9 +20,9 @@ const MAX_CLIP_BYTES = 200 * 1024 * 1024;
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 /**
- * Dev only: `?showcase&rec` posts finished clips to `/__clips/<name>.webm`, which lands them in
- * `media/clips/` (gitignored). Browsers block repeated automatic downloads; this needs no prompt.
- * The dev server listens on the LAN, so only this machine may write.
+ * Dev only: `?showcase&rec` posts finished clips to `/__clips/<name>.webm` (promo screenshots go to
+ * `/__clips/<name>.png`), which lands them in `media/clips/` (gitignored). Browsers block repeated
+ * automatic downloads; this needs no prompt. The dev server listens on the LAN, so only this machine may write.
  */
 function clipSink(): Plugin {
   const root = fileURLToPath(new URL('..', import.meta.url));
@@ -33,7 +33,7 @@ function clipSink(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__clips', (req, res) => {
         const name = decodeURIComponent((req.url ?? '').slice(1));
-        if (req.method !== 'POST' || !LOOPBACK.has(req.socket.remoteAddress ?? '') || !/^legion-[\w-]+\.webm$/.test(name)) {
+        if (req.method !== 'POST' || !LOOPBACK.has(req.socket.remoteAddress ?? '') || !/^legion-[\w-]+\.(webm|png)$/.test(name)) {
           res.statusCode = 403;
           return res.end();
         }

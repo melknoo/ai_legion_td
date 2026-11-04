@@ -164,7 +164,9 @@ export class BattleScene extends Phaser.Scene {
     const data = new URLSearchParams(location.search).has('fast')
       ? { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0, arenaBuildMs: 8000 } }
       : LEGION_DATA;
-    if (!SHOWCASE) return new LocalSession(data, config);
+    // Dev aid: `?auto` lets a bot play the own seat in a normal game (HUD screenshots, promo clips);
+    // `seed`/`wave` work as in showcase clips.
+    if (!SHOWCASE && !new URLSearchParams(location.search).has('auto')) return new LocalSession(data, config);
     const { seed, wave } = showcaseParams();
     const session = new LocalSession(data, config, { seed, autopilot: true });
     if (wave > 1) session.skipToWave(wave);

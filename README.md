@@ -28,7 +28,7 @@ npm run typecheck
 - Open `http://localhost:5173`: the title menu offers a solo game (1v1 to 4v4 with bots), creating an online game (with a name, public or private), joining one from the list of open public games or by room code (or pasted invite link), and setting your name.
 - Online rooms: the host picks the mode (All Pick, All Random, Single Draft, All Prophet), adds bots, switches the room between public (listed for everyone) and private (code/link only) and starts; others pick team and builder and get ready. Friends on your network use your LAN IP instead of localhost. A dropped player (reload, lost network) can rejoin a running game within 60 s: the tab keeps the reconnection token (`client/src/net/rejoin.ts`) and a bot plays the seat meanwhile.
 - Deep links: `?room=CODE` joins, `?online` creates a private room, `?builder=grove&size=2&mode=ar` (`ap`, `ar`, `sd`, `apr`) starts a solo game directly.
-- Dev options: `?fast` (short build phases), `?timeout` (setTimeout game loop for throttled/background windows), `?showcase` (bots only, 9:16 canvas and clip recording for Shorts, parameters in `docs/shorts.md`).
+- Dev options: `?fast` (short build phases), `?timeout` (setTimeout game loop for throttled/background windows), `?showcase` (bots only, 9:16 canvas and clip recording for Shorts, parameters in `docs/shorts.md`), `?auto` (a bot plays your seat in a normal solo game with HUD; `seed`/`wave` as in showcase, for screenshots and promo clips).
 - Server smoke test: `cd server && npx tsx scripts/smoke.ts` (with the server running).
 
 Controls (everything also works with the mouse via the HUD):
