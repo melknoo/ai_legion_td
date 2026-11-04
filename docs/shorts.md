@@ -103,18 +103,18 @@ Beispiel: `http://localhost:5173/?showcase&seed=7&wave=10&builder=grove&vs=corsa
 
 Seit 04.11. privat (ersetzt durch den zweiten Vorrat, alter Look). In `schedule.json` tragen diese Einträge `retired` und `videoId`.
 
-**Zweiter Vorrat (04.11.2026, neuer Look):** 8 Clips, Rezepte in `schedule.json` (`v2-…`), MP4 per `tools/shorts/to-mp4.sh`, danach umbenannt nach `<Termin>-<trailer|short>-<builder>-<inhalt>.mp4` (Feld `clip`):
+**Zweiter Vorrat (04.11.2026, neuer Look):** vom Owner freigegeben (Commit 26a56c6), am 04.11. per Chrome geplant hochgeladen, alle alten acht danach privat. 8 Clips, Rezepte in `schedule.json` (`v2-…`), MP4 per `tools/shorts/to-mp4.sh`, danach umbenannt nach `<Termin>-<trailer|short>-<builder>-<inhalt>.mp4` (Feld `clip`):
 
 | Termin (17:30, GMT+1) | Titel | Clip | Ergebnis | Video | Playlist |
 |---|---|---|---|---|---|
-| 04.11. 19:00 | Legion Pixel – free tower defense in your browser (Trailer) | canopy s4 w25 | – | | – |
-| 05.11. | Can Warclan beat the first boss? | warclan s3 w10 | HELD | | Boss moments |
-| 06.11. | Watch the whole wave melt | abyss s4 w15 | HELD | | Satisfying |
-| 07.11. | Can Clockwork survive wave 9? | clockwork s2 w9 | 27 LEAKED | | Fails (neu) |
-| 08.11. | Can Canopy hold three bosses? | canopy s4 w20 | HELD | | Boss moments |
-| 09.11. | Random eggs vs. the boss | chimera s15 w10 | HELD | | Boss moments |
-| 10.11. | Will the boss get through? | primal s3 w10 | 1 LEAKED | | Boss moments |
-| 11.11. | Will Abyss hold the boss? | abyss s4 w10 | HELD | | Boss moments |
+| 04.11. 19:00 | Legion Pixel – free tower defense in your browser (Trailer) | canopy s4 w25 | – | [NGBGiicbXIY](https://youtube.com/shorts/NGBGiicbXIY) | – |
+| 05.11. | Can Warclan beat the first boss? | warclan s3 w10 | HELD | [If534ZSmQEU](https://youtube.com/shorts/If534ZSmQEU) | Boss moments |
+| 06.11. | Watch the whole wave melt | abyss s4 w15 | HELD | [c-bvbZO3u3E](https://youtube.com/shorts/c-bvbZO3u3E) | Satisfying |
+| 07.11. | Can Clockwork survive wave 9? | clockwork s2 w9 | 27 LEAKED | [osdGrNotBik](https://youtube.com/shorts/osdGrNotBik) | Fails |
+| 08.11. | Can Canopy hold three bosses? | canopy s4 w20 | HELD | [yOx8izB6h1k](https://youtube.com/shorts/yOx8izB6h1k) | Boss moments |
+| 09.11. | Random eggs vs. the boss | chimera s15 w10 | HELD | [T3CMnhQ_OkY](https://youtube.com/shorts/T3CMnhQ_OkY) | Boss moments |
+| 10.11. | Will the boss get through? | primal s3 w10 | 1 LEAKED | [nrcwD5MZwJI](https://youtube.com/shorts/nrcwD5MZwJI) | Boss moments |
+| 11.11. | Will Abyss hold the boss? | abyss s4 w10 | HELD | [t3mN8KZTZPE](https://youtube.com/shorts/t3mN8KZTZPE) | Boss moments |
 
 Upload per Chrome: Das Upload-Werkzeug der Erweiterung nimmt nur Dateien bis 10 MB. Darum wandelt `sh tools/shorts/to-mp4.sh media/clips/<clip>.webm` jeden Clip in ein H.264-MP4 unter 10 MB (≤ 2,6 Mbit/s, sieht bei Pixel-Art aus wie das WebM; Ton per `loudnorm` lauter; ffmpeg per winget `Gyan.FFmpeg`, Pfad über `FFMPEG_DIR`). Das lädt Claude selbst hoch und füllt die Entwürfe aus (Titel, Text, Tags, Playlist, „nicht für Kinder“, Termin).
 

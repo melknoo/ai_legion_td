@@ -166,7 +166,8 @@
       "legion td",
       "multiplayer"
     ],
-    "playlist": null
+    "playlist": null,
+    "videoId": "NGBGiicbXIY"
   },
   {
     "id": "v2-boss10-warclan-s3",
@@ -183,7 +184,8 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "If534ZSmQEU"
   },
   {
     "id": "v2-melt15-abyss-s4",
@@ -200,7 +202,8 @@
       "legion td",
       "satisfying"
     ],
-    "playlist": "Satisfying"
+    "playlist": "Satisfying",
+    "videoId": "c-bvbZO3u3E"
   },
   {
     "id": "v2-fail9-clockwork-s2",
@@ -217,7 +220,8 @@
       "legion td",
       "fail"
     ],
-    "playlist": "Fails"
+    "playlist": "Fails",
+    "videoId": "osdGrNotBik"
   },
   {
     "id": "v2-boss20-canopy-s4",
@@ -234,7 +238,8 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "yOx8izB6h1k"
   },
   {
     "id": "v2-boss10-chimera-s15",
@@ -251,7 +256,8 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "T3CMnhQ_OkY"
   },
   {
     "id": "v2-boss10-primal-s3",
@@ -268,7 +274,8 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "nrcwD5MZwJI"
   },
   {
     "id": "v2-boss10-abyss-s4",
@@ -285,6 +292,7 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "t3mN8KZTZPE"
   }
 ]
