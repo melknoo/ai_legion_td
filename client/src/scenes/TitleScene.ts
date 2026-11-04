@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, PROPHET, ROOM_TITLE_CHARS, ROOM_TITLE_MAX, modeLocksBuilder, rollBuilders, rollableBuilders, roomTitle, type ModeId, type RoomListing } from '@legion/shared';
 import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
-import { fetchRooms } from '../net/server.ts';
+import { DESKTOP, desktop } from '../desktop.ts';
+import { OFFICIAL_SERVER, fetchRooms, normalizeServer, serverUrl } from '../net/server.ts';
+import { settings, updateSettings } from '../settings.ts';
 import type { SoloConfig } from '../session/LocalSession.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { facesetKey } from '../ui/Hud.ts';
@@ -13,7 +15,7 @@ import { onKey } from '../ui/keys.ts';
 import { TOUCH } from '../ui/touch.ts';
 import { FONT } from './BootScene.ts';
 
-type Panel = 'main' | 'solo' | 'create' | 'title' | 'join' | 'code' | 'name' | 'options';
+type Panel = 'main' | 'solo' | 'create' | 'title' | 'join' | 'code' | 'name' | 'options' | 'server';
 
 interface MenuItem {
   label: () => string;
@@ -97,6 +99,7 @@ export class TitleScene extends Phaser.Scene {
     key('keydown-ESC', () => {
       if (this.panel === 'code') this.openList();
       else if (this.panel === 'title') this.show('create');
+      else if (this.panel === 'server') this.show('options');
       else if (this.panel !== 'main') this.show('main');
     });
     this.input.on('pointermove', () => (this.mouseMoved = true));
@@ -185,8 +188,35 @@ export class TitleScene extends Phaser.Scene {
       };
       this.layer.add(this.note.text);
     } else if (panel === 'options') {
-      this.items = [...OPTION_ITEMS.map((o) => ({ label: o.label, change: o.change, action: () => o.change(1) })), back];
-      this.window(132, 150, 216, 84);
+      this.items = [
+        ...OPTION_ITEMS.map((o) => ({ label: o.label, change: o.change, action: () => o.change(1) })),
+        // Desktop app: which game server online games use (the browser always uses its own origin).
+        ...(DESKTOP ? [{ label: () => `SERVER: ${serverLabel()}`, action: () => this.show('server') }] : []),
+        back,
+      ];
+      const h = 14 + this.items.length * 14;
+      this.window(DESKTOP ? 120 : 132, 234 - h, DESKTOP ? 240 : 216, h);
+    } else if (panel === 'server') {
+      const submit = (v: string) => this.saveServer(v);
+      this.input_ = new TextInput(this, 110, 160, 260, {
+        maxLength: 60,
+        allowed: /[a-z0-9.:/_-]/,
+        initial: settings().server,
+        clean: (raw) => raw.trim().toLowerCase(),
+        onEnter: submit,
+      }).setActive(true);
+      this.items = [
+        { label: () => 'OK', action: () => submit(this.input_!.value) },
+        { label: () => 'USE OFFICIAL SERVER', action: () => submit('') },
+        { label: () => 'BACK', action: () => this.show('options') },
+      ];
+      this.window(100, 140, 280, 104, 34);
+      this.layer.add(this.add.bitmapText(240, 146, FONT, 'SERVER ADDRESS (EMPTY = OFFICIAL)').setOrigin(0.5, 0).setTint(0xc0c8f0));
+      this.note = {
+        text: this.add.bitmapText(240, 228, FONT, '').setOrigin(0.5, 0).setTint(0xc0c8f0),
+        get: () => (desktop?.serverOverride ? 'SET BY --SERVER, THAT ONE WINS' : TOUCH ? '' : 'E.G. 192.168.1.5:2567 (CTRL+V)'),
+      };
+      this.layer.add(this.note.text);
     } else {
       const join = panel === 'code';
       const title = panel === 'title';
@@ -314,6 +344,13 @@ export class TitleScene extends Phaser.Scene {
     this.show('create');
   }
 
+  private saveServer(value: string): void {
+    const server = normalizeServer(value);
+    if (server === null) return void (this.note && (this.note.get = () => 'NOT A SERVER ADDRESS'));
+    updateSettings({ server });
+    this.show('options');
+  }
+
   private saveName(value: string): void {
     this.name = value.trim() || 'PLAYER';
     storeName(this.name);
@@ -355,6 +392,13 @@ export class TitleScene extends Phaser.Scene {
     this.add.bitmapText(VIEW_W / 2, 104, FONT, 'MULTIPLAYER TOWER DEFENSE').setOrigin(0.5).setTint(0x9aa0d0);
     this.tweens.add({ targets: logo, y: 43, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
+}
+
+/** Host of the game server online games use, short enough for the options line. */
+function serverLabel(): string {
+  const url = serverUrl();
+  if (url === OFFICIAL_SERVER) return 'OFFICIAL';
+  return url.replace(/^https?:\/\//, '').toUpperCase().slice(0, 18);
 }
 
 function roomLabel(r: RoomListing): string {

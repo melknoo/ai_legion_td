@@ -33,6 +33,8 @@ export class TextInput {
   /** Characters that fit the field; longer values scroll to show their end. */
   private readonly fits: number;
   private readonly clean: (raw: string) => string;
+  /** Phaser can re-dispatch the key that opened this field (Enter on a menu line); ignore older keys. */
+  private readonly born = performance.now();
 
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, w: number, private readonly o: TextInputOptions) {
     this.value = o.initial ?? '';
@@ -96,7 +98,7 @@ export class TextInput {
   }
 
   private key(e: KeyboardEvent): void {
-    if (!this.active || this.dom) return;
+    if (!this.active || this.dom || e.timeStamp < this.born) return;
     if (e.key === 'Backspace') this.value = this.value.slice(0, -1);
     else if (e.key === 'Enter') this.o.onEnter?.(this.value);
     else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) this.append(e.key);
