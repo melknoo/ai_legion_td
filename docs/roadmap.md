@@ -20,6 +20,8 @@ Langfristige Themen, nach und nach umzusetzen. Reihenfolge: Standalone → Kampa
 
 ## Phase 2 – Roguelike-Kampagne (neuer Modus)
 
+Details: [campaign.md](campaign.md) (eine Lane, PvE, 3 Akte, 3 Profil-Slots, Draft ab 1 Einheit).
+
 - **Run:** Karte aus Knoten (Welle, Elite, Boss, Shop, Event, Rast), Pfad wählbar. Jeder Kampfknoten nutzt die bestehende Sim (eine oder mehrere Wellen). Ein Seed pro Run.
 - **Im Run:** Fighter-Draft (1 aus 3 ins Roster – passt zu `PlayerState.fighters` aus der Prophet-Logik), Relikte/Segen (globale Modifier, z. B. +x % Schaden für ein Tier, billigere Mercs), Flüche, Events mit Entscheidungen.
 - **Meta-Progression:** Start mit 2–3 Buildern, weitere „Rassen“ durch Fortschritt freischalten; Meta-Währung; wenige permanente Upgrades; Schwierigkeitsstufen (Ascension) statt endloser Stat-Inflation.
@@ -27,7 +29,7 @@ Langfristige Themen, nach und nach umzusetzen. Reihenfolge: Standalone → Kampa
 - **Incremental:** vorerst nur Idee (z. B. Meta-Währung idle sammeln, Prestige-Schicht). Entscheidung nach dem ersten spielbaren Run.
 - **Technik-Hooks:** Modifier-Schnittstelle in `game.ts`, Run-Zustand außerhalb der Sim, Save-System, neue Szene für die Run-Karte, Balancing per Bot-vs-Bot-Simulation.
 - **MVP:** 1 Akt, 4 Knotentypen, ~10 Relikte, 3 freischaltbare Builder.
-- **Offene Fragen:** Koop-Runs (2 Spieler)? Run-Länge (20–40 min)? Gegner nur Wellen-Creeps oder auch Bot-Gegner wie in der Arena?
+- **Entschieden:** Run 3 Akte / ~45–60 min, nur Wellen (kein Gegner-Spieler), Koop später.
 
 ## Phase 3 – Mobile App
 
