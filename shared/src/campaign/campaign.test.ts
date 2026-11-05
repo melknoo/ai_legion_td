@@ -4,7 +4,7 @@ import { botCommands } from '../sim/bot.ts';
 import { Game } from '../sim/game.ts';
 import { Rng } from '../sim/rng.ts';
 import { campaignBuilders, draftOptions, fighterTier, starterOptions } from './draft.ts';
-import { MAP_ROWS, findNode, generateAct } from './map.ts';
+import { MAP_ROWS, MIN_FIGHTS, findNode, generateAct, isFight, type ActMap, type MapNode } from './map.ts';
 import { RELICS, applyRelics, relicOptions } from './relics.ts';
 import { ROSTER_CAP, SKIP_LUMBER, campaignData, kingMaxHp } from './rules.ts';
 import {
@@ -17,6 +17,7 @@ import {
   nodeBattle,
   parseRun,
   reachable,
+  nodeWaves,
   rest,
   shopBuy,
   type RunState,
@@ -25,6 +26,12 @@ import {
 const D = LEGION_DATA;
 /** New run with the starting pick made (the tier-2 fighter). */
 const started = (seed: number, builder: string) => chooseReward(newRun(D, seed, builder), D, 1);
+/** Fights on every path from row 1 to the boss. */
+function pathFights(map: ActMap): number[] {
+  const walk = (n: MapNode, fights: number): number[] =>
+    n.kind === 'boss' ? [fights] : n.next.flatMap((id) => walk(findNode(map, id)!, fights + (isFight(n) ? 1 : 0)));
+  return map.rows[0]!.flatMap((n) => walk(n, 0));
+}
 const crossing = (a: [number, number], b: [number, number]) => (a[0] < b[0] && a[1] > b[1]) || (a[0] > b[0] && a[1] < b[1]);
 
 describe('act map', () => {
@@ -40,11 +47,12 @@ describe('act map', () => {
       for (const row of map.rows.slice(1, -2)) for (const k of ['elite', 'shop', 'rest']) expect(row.filter((n) => n.kind === k).length).toBeLessThanOrEqual(1);
       for (const row of map.rows) {
         for (const n of row) {
-          if (n.kind === 'battle' || n.kind === 'elite') expect(n.waves![1] - n.waves![0]).toBe(1);
           if (n.kind === 'elite') expect(n.affix).toBeDefined();
           if (n.row < MAP_ROWS) expect(n.next.length).toBeGreaterThan(0);
         }
       }
+      // Waves only advance by fighting: every path to the boss has enough fights.
+      expect(Math.min(...pathFights(map))).toBeGreaterThanOrEqual(MIN_FIGHTS);
       // Every node is reachable, and no two paths cross.
       for (let r = 1; r < map.rows.length; r++) {
         for (const n of map.rows[r]!) expect(map.rows[r - 1]!.some((m) => m.next.includes(n.id))).toBe(true);
@@ -54,13 +62,9 @@ describe('act map', () => {
     }
   });
 
-  it('is deterministic and plays waves 1-9 before the wave-10 boss', () => {
+  it('is deterministic; the boss plays wave 10', () => {
     expect(generateAct(7, 1)).toEqual(generateAct(7, 1));
-    const map = generateAct(7, 1);
-    const firsts = map.rows.slice(0, 6).map((row) => row.find((n) => n.waves)?.waves?.[0]).filter((w) => w !== undefined);
-    expect(Math.min(...firsts)).toBe(1);
-    expect(map.rows.at(-1)![0]!.waves).toEqual([10, 10]);
-    for (const row of map.rows) for (const n of row) if (n.waves && n.kind !== 'boss') expect(n.waves[1]).toBeLessThanOrEqual(9);
+    expect(generateAct(7, 1).rows.at(-1)![0]!.waves).toEqual([10, 10]);
   });
 });
 
@@ -145,6 +149,7 @@ describe('run', () => {
     run = playNode(run);
     expect(run.status).toBe('reward');
     expect(run.stats.waves).toBe(2);
+    expect(run.wave).toBe(3);
     expect(run.army.units.length).toBeGreaterThan(0);
     expect(run.rewards[0]!.kind).toBe('draft');
     const pick = run.rewards[0]!.options[0]!;
@@ -155,6 +160,21 @@ describe('run', () => {
     expect(skipped.army.players[0]!.lumber).toBe(run.army.players[0]!.lumber + SKIP_LUMBER);
     // Moving on: only the linked nodes of the next row.
     expect(reachable(after).every((n) => n.row === 2)).toBe(true);
+  });
+
+  it('fights the next waves in order: detours skip none, the last two repeat before the boss', () => {
+    const run = started(5, 'grove');
+    const battle = run.map.rows.flat().find((n) => n.kind === 'battle')!;
+    const elite = { ...battle, kind: 'elite' as const };
+    const boss = run.map.rows.at(-1)![0]!;
+    const at = (wave: number) => ({ ...run, wave });
+    expect(nodeWaves(at(1), battle)).toEqual([1, 2]);
+    // Two fights in, then loot and a shop: the next fight still plays waves 5-6.
+    expect(nodeWaves(at(5), battle)).toEqual([5, 6]);
+    expect(nodeWaves(at(9), elite)).toEqual([8, 9]);
+    expect(nodeWaves(at(12), battle)).toEqual([8, 9]);
+    expect(nodeWaves(at(3), boss)).toEqual([10, 10]);
+    expect(nodeWaves(run, run.map.rows.flat().find((n) => !isFight(n) && n.kind !== 'boss')!)).toBeNull();
   });
 
   it('needs a fighter to replace once the roster is full; built units stay', () => {
@@ -197,6 +217,9 @@ describe('run', () => {
     expect(lost.status).toBe('lost');
     expect(parseRun(JSON.stringify(run))).toEqual(run);
     expect(parseRun('{"version":99}')).toBeNull();
+    // v1 saves (waves by map row) continue after the waves fought so far.
+    const v1 = { ...run, version: 1, wave: undefined, stats: { ...run.stats, waves: 4 } };
+    expect(parseRun(JSON.stringify(v1))).toMatchObject({ version: 2, wave: 5 });
     expect(parseRun('nope')).toBeNull();
   });
 });

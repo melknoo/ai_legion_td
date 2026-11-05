@@ -2,10 +2,11 @@ import type { CampaignConfig, CampaignStart } from '../sim/game.ts';
 import { Rng } from '../sim/rng.ts';
 import type { GameData } from '../sim/types.ts';
 import { draftOptions, starterOptions } from './draft.ts';
-import { AFFIXES, findNode, generateAct, type ActMap, type MapNode } from './map.ts';
+import { AFFIXES, findNode, generateAct, isFight, type ActMap, type MapNode } from './map.ts';
 import { PIGGY_BANK, PIGGY_MAX, PIGGY_RATE, RELICS, TIN_CROWN, TIN_CROWN_HP, relicOptions } from './relics.ts';
 import {
   ACTS,
+  ACT_WAVES,
   DRAFT_TIERS,
   PRICES,
   REST_HEAL,
@@ -23,7 +24,7 @@ import {
  * the input unchanged). The client renders it and persists it; battles run in a normal Game built
  * from `nodeBattle`, whose snapshot comes back through `finishBattle`.
  */
-export const RUN_VERSION = 1;
+export const RUN_VERSION = 2;
 
 export type RunStatus = 'map' | 'battle' | 'reward' | 'shop' | 'rest' | 'won' | 'lost';
 
@@ -44,6 +45,8 @@ export interface RunState {
   builder: string;
   act: number;
   map: ActMap;
+  /** Next wave the run fights (absolute wave number). Only fights advance it, so detours skip nothing. */
+  wave: number;
   /** Node entered last (null before the first). */
   at: string | null;
   visited: string[];
@@ -69,6 +72,7 @@ export function newRun(d: GameData, seed: number, builder: string): RunState {
     builder,
     act: 1,
     map: generateAct(seed, 1),
+    wave: 1,
     at: null,
     visited: [],
     relics: [],
@@ -154,6 +158,19 @@ export function enterNode(run: RunState, base: GameData, nodeId: string): RunSta
   return next;
 }
 
+/**
+ * Waves a fight node plays: the run's next two. The boss keeps its own wave; once the act's last
+ * normal wave is reached, further fights replay the last two (no boss creeps before the boss).
+ */
+export function nodeWaves(run: RunState, node: MapNode): [number, number] | null {
+  if (node.kind === 'boss') return node.waves ?? null;
+  if (!isFight(node)) return null;
+  const offset = (run.act - 1) * ACT_WAVES;
+  const last = offset + ACT_WAVES - 1;
+  const first = Math.min(Math.max(run.wave, offset + 1), last - 1);
+  return [first, first + 1];
+}
+
 export interface NodeBattle {
   data: GameData;
   seed: number;
@@ -164,9 +181,10 @@ export interface NodeBattle {
 /** Everything needed to start the current combat node's Game (same node → same seed → same waves). */
 export function nodeBattle(run: RunState, base: GameData): NodeBattle | null {
   const node = currentNode(run);
-  if (run.status !== 'battle' || !node?.waves) return null;
+  const waves = node && nodeWaves(run, node);
+  if (run.status !== 'battle' || !node || !waves) return null;
   const data = runData(run, base);
-  const [firstWave, lastWave] = node.waves;
+  const [firstWave, lastWave] = waves;
   const start: CampaignStart = JSON.parse(JSON.stringify(run.army)) as CampaignStart;
   for (const p of start.players) p.income += incomeAt(firstWave);
   const creep = data.waves[firstWave - 1]?.creep ?? '';
@@ -188,7 +206,8 @@ export interface BattleResult {
 
 export function finishBattle(run: RunState, base: GameData, result: BattleResult): RunState {
   const node = currentNode(run);
-  if (run.status !== 'battle' || !node?.waves) return run;
+  const waves = node && nodeWaves(run, node);
+  if (run.status !== 'battle' || !node || !waves) return run;
   const next = clone(run);
   next.stats.leaks += result.leaks ?? 0;
   if (!result.won || !result.state) {
@@ -196,7 +215,8 @@ export function finishBattle(run: RunState, base: GameData, result: BattleResult
     next.status = 'lost';
     return next;
   }
-  const [firstWave, lastWave] = node.waves;
+  const [firstWave, lastWave] = waves;
+  next.wave = Math.max(next.wave, lastWave + 1);
   next.army = JSON.parse(JSON.stringify(result.state)) as CampaignStart;
   for (const p of next.army.players) p.income = Math.max(0, p.income - incomeAt(firstWave));
   next.stats.waves += lastWave - firstWave + 1;
@@ -318,7 +338,13 @@ export function rest(run: RunState, base: GameData, choice: 'heal' | 'train'): R
 export function parseRun(json: string): RunState | null {
   try {
     const run = JSON.parse(json) as RunState;
-    if (!run || run.version !== RUN_VERSION || !run.map?.rows || !run.army?.players?.length) return null;
+    if (!run || !run.map?.rows || !run.army?.players?.length) return null;
+    // v1 tied waves to map rows; carry on from the waves fought so far.
+    if (run.version === 1) {
+      run.wave = (run.stats?.waves ?? 0) + 1;
+      run.version = 2;
+    }
+    if (run.version !== RUN_VERSION) return null;
     return run;
   } catch {
     return null;

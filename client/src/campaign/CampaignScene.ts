@@ -18,6 +18,7 @@ import {
   kingMax,
   leaveShop,
   newRun,
+  nodeWaves,
   reachable,
   rest,
   shopBuy,
@@ -381,8 +382,12 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   private nodeInfo(n: MapNode): string {
+    const run = this.run!;
     const wave = (w: number) => upper(D.units[D.waves[w - 1]?.creep ?? '']?.name ?? '?');
-    const waves = n.waves ? (n.waves[0] === n.waves[1] ? `WAVE ${n.waves[0]}: ${wave(n.waves[0])}` : `WAVES ${n.waves[0]}-${n.waves[1]}: ${wave(n.waves[0])}, ${wave(n.waves[1])}`) : '';
+    // Only fights advance the waves: a node's waves are known once it is the next step (the boss always).
+    const next = n.kind === 'boss' || reachable(run).some((o) => o.id === n.id);
+    const w = next ? nodeWaves(run, n) : null;
+    const waves = w ? (w[0] === w[1] ? `WAVE ${w[0]}: ${wave(w[0])}` : `WAVES ${w[0]}-${w[1]}: ${wave(w[0])}, ${wave(w[1])}`) : `NEXT FIGHT FROM WAVE ${run.wave}`;
     switch (n.kind) {
       case 'battle':
         return `BATTLE\n${waves}\nREWARD: A FIGHTER`;

@@ -16,13 +16,13 @@ Entscheidungen beim Umsetzen (weichen teils von unten ab):
   - Jeder Builder hat genau 6 Basis-Fighter. Fehlende eigene im Tier-Fenster kommen zuerst, höchstens 2 pro Draft; der Rest kommt aus anderen Buildern.
   - Tier-Fenster in Akt 1: T1–3, bei Elite und Boss +1.
   - Roster-Cap 10. Beim Ersetzen bleiben gebaute Einheiten stehen.
-- **Wellen:** Battle und Elite spielen 2 Wellen. Die Wellenstufe hängt von der Zeile ab: (1,2) (2,3) (3,4) (5,6) (6,7) (8,9), der Boss spielt Welle 10.
+- **Wellen:** Wellen laufen fortlaufend, nur Kämpfe bringen sie weiter. Battle und Elite spielen die nächsten 2 Wellen; Loot, Shop und Rest überspringen nichts. Nach Welle 9 wiederholen weitere Kämpfe die Wellen 8–9, der Boss spielt Welle 10. Die Karte garantiert mindestens 4 Kämpfe pro Pfad (`MIN_FIGHTS`). Zuerst hing die Welle an der Kartenzeile: Wer Umwege nahm, kam zu schwach in Welle 8 an.
 - **Karte:** Pro Zeile gibt es höchstens 1 Elite, 1 Shop und 1 Rest.
 - **Income:** `incomeAt(welle) = 4 + 2·welle` als Basis pro Knoten. König-Upgrades geben weiter +3.
 - **König:** Wellen-Buffs und Grants sind aus, weil sich Wellennummern über Knoten wiederholen. Der König wächst nur über Upgrades und Relikte.
 - **Preise (Lumber):** Relikt 90, Heilung 50 (+25 %), Rekrut 60. Draft überspringen: +20. Rest: +30 % HP oder +1 Wisp.
 
-Headless-Sim (`npx tsx tools/campaign/sim.ts all 3`, Bot spielt): 16/57 Runs gewonnen (28 %). Typische Bot-Niederlagen:
+Headless-Sim (`npx tsx tools/campaign/sim.ts all 3`, Bot spielt): 20/57 Runs gewonnen (35 %; mit wellenabhängigen Zeilen waren es 28 %). Typische Bot-Niederlagen:
 - Wellen 5–6 (Gale Hawk), wenn der Bot bis dahin nur 1–2 Drafts hatte.
 - Boss: Drei Leaks der Warlord-Bosse töten den König.
 
@@ -52,7 +52,7 @@ Titel → CAMPAIGN → Slot wählen → Hub (Talente, Freischaltungen)
 | 3 | 21–29 | Mountain Titan (Welle 30) | ~15–20 min |
 | (Finale, später) | – | Abyss Lord (Welle 31) | Freischaltung |
 
-Die Creeps kommen aus den bestehenden `WAVES` in `shared/src/data/legion.ts`. Die Stärke richtet sich nach der **Zeile auf der Karte**, nicht nach der Zahl der schon gekämpften Wellen. Wer einen Pfad mit weniger Kämpfen nimmt, bekommt also nicht leichtere Wellen, sondern nur weniger Gold und weniger Drafts.
+Die Creeps kommen aus den bestehenden `WAVES` in `shared/src/data/legion.ts`. Die Wellen laufen **fortlaufend**: Jeder Kampf spielt die nächsten Wellen, Umwege über Loot, Shop oder Rest überspringen keine. Jeder Pfad hat mindestens 4 Kämpfe, damit das Heer vor dem Boss genug gewachsen ist.
 
 ## 3. Karte und Knoten
 
