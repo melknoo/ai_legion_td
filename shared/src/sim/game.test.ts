@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { armorMultiplier } from './damage.ts';
-import { Game, type GameEvent } from './game.ts';
+import { Game, type CampaignConfig, type GameEvent } from './game.ts';
 import { testData } from './testData.ts';
 import type { GameData, Rules } from './types.ts';
 import { STATUS, type AbilityDef } from './abilities.ts';
@@ -599,5 +599,74 @@ describe('legion abilities', () => {
     const { FIGHTER_ABILITIES } = await import('../data/abilities.ts');
     const { LEGION_DATA } = await import('../data/legion.ts');
     for (const id of Object.keys(FIGHTER_ABILITIES)) expect(LEGION_DATA.units[id]?.abilities?.length).toBeGreaterThan(0);
+  });
+});
+
+describe('campaign nodes (PvE)', () => {
+  const solo = (data: GameData, campaign: CampaignConfig, seed = 1) =>
+    new Game({ seed, data, players: [{ id: 'a', name: 'Alice', team: 0, builder: 'grove' }], campaign });
+  const over = (ev: GameEvent[]) => ev.some((e) => e.type === 'gameOver');
+
+  it('plays only its waves and is won once the last one is cleared', () => {
+    const g = solo(testData(), { firstWave: 2, lastWave: 2 });
+    expect([g.pve, g.wave, g.phaseEndsAtMs]).toEqual([true, 2, g.buildDurationMs(2)]);
+    defend(g, 0);
+    const events = runUntil(g, over);
+    expect(g.winner).toBe(0);
+    expect(events.filter((e) => e.type === 'phase' && e.phase === 'fight').map((e) => e.type === 'phase' && e.wave)).toEqual([2]);
+    expect(g.players[0]!.gold).toBeGreaterThan(0);
+  });
+
+  it('is lost when the king falls', () => {
+    const base = testData();
+    const data = { ...base, units: { ...base.units, king: { ...base.units.king!, hp: 10, hpRegen: 0, attack: { ...base.units.king!.attack, damage: [0, 0] as [number, number] } } } };
+    const g = solo(data, { firstWave: 1, lastWave: 2 });
+    runUntil(g, over);
+    expect(g.winner).toBe(1);
+  });
+
+  it('has no sends and never ticks into an arena', () => {
+    const g = solo(withRules({ arenaWaves: [1] }), { firstWave: 1, lastWave: 2 });
+    expect(g.apply({ type: 'sendMerc', player: 0, merc: 'brute' }).ok).toBe(false);
+    defend(g, 0);
+    const events = runUntil(g, over);
+    expect(events.some((e) => e.type === 'phase' && e.phase === 'arena')).toBe(false);
+  });
+
+  it('resumes the next node from a snapshot: army, economy and king', () => {
+    const g = solo(testData(), { firstWave: 1, lastWave: 1 });
+    g.players[0]!.gold = 1000;
+    defend(g, 0);
+    g.apply({ type: 'upgrade', player: 0, unitId: fightersOf(g, 0).find((u) => u.def === 'sprout')!.id, to: 'oak' });
+    g.apply({ type: 'upgradeKing', player: 0, stat: 'hp' });
+    g.apply({ type: 'upgradeKing', player: 0, stat: 'attack' });
+    runUntil(g, over);
+    g.king(0).hp -= 300;
+    const snap = g.campaignState();
+    const next = solo(testData(), { firstWave: 2, lastWave: 2, start: snap });
+    expect(next.campaignState()).toEqual(snap);
+    expect(fightersOf(next, 0).map((u) => [u.def, u.cell, u.fresh])).toEqual(fightersOf(g, 0).map((u) => [u.def, u.cell, false]));
+    expect([next.king(0).maxHp, next.king(0).mods.damage]).toEqual([g.king(0).maxHp, g.king(0).mods.damage]);
+    // A restored fighter sells at the normal refund, not as freshly placed.
+    const oak = fightersOf(next, 0).find((u) => u.def === 'oak')!;
+    const gold = next.players[0]!.gold;
+    next.apply({ type: 'sell', player: 0, unitId: oak.id });
+    expect(next.players[0]!.gold).toBe(gold + Math.floor(oak.invested * 0.5));
+  });
+
+  it('applies elite affixes to wave creeps', () => {
+    const g = solo(testData(), { firstWave: 1, lastWave: 1, affix: { hpMul: 2, countMul: 1.5, armor: 3, abilities: [{ name: 'Spikes', kind: 'thorns', ratio: 0.2 }] } });
+    defend(g, 0);
+    const spawned = new Set<number>();
+    runUntil(g, (ev) => {
+      for (const e of ev) if (e.type === 'spawn' && g.units.get(e.unitId)?.kind === 'creep') spawned.add(e.unitId);
+      return over(ev);
+    });
+    expect(spawned.size).toBe(9);
+    const g2 = solo(testData(), { firstWave: 1, lastWave: 1, affix: { hpMul: 2, armor: 3, abilities: [{ name: 'Spikes', kind: 'thorns', ratio: 0.2 }] } });
+    const creep = runUntil(g2, (ev) => ev.some((e) => e.type === 'spawn' && g2.units.get(e.unitId)?.kind === 'creep'));
+    const c = [...g2.units.values()].find((u) => u.kind === 'creep')!;
+    expect(creep.length).toBeGreaterThan(0);
+    expect([c.maxHp, c.mods.armor, c.granted.map((a) => a.name)]).toEqual([120, 3, ['Spikes']]);
   });
 });

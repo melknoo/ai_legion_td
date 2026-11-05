@@ -1,6 +1,32 @@
 # CAMPAIGN – Roguelike-Kampagne (Phase 2)
 
-Design-Dokument für den neuen Modus. Kurzfassung in [roadmap.md](roadmap.md), Spielregeln in [mechanics.md](mechanics.md). Stand: 4. Nov 2026, noch nichts umgesetzt.
+Design-Dokument für den neuen Modus. Kurzfassung in [roadmap.md](roadmap.md), Spielregeln in [mechanics.md](mechanics.md).
+
+## Stand (5. Nov 2026): M0 + M1 umgesetzt
+
+Akt 1 ist von Start bis Boss spielbar (Menü CAMPAIGN oder `?campaign`). Technik siehe `CLAUDE.md` (Abschnitt Architecture, Campaign).
+
+Umgesetzt:
+- **M0**: optionale Sim-Hooks `GameConfig.campaign` (nur Team 0, Wellen-Ausschnitt, Start-Snapshot, Elite-Affix), `game.campaignState()`, `game.pve`. Der Golden-Test (`shared/src/sim/golden.test.ts`) pinnt drei klassische Bot-Partien, eine davon durch die Arena nach Welle 10.
+- **M1**: Karte (6 gemischte Zeilen, Rest-Zeile, Boss), Knoten Battle, Elite (5 Affixe), Shop, Rest, Treasure, Boss. Dazu Draft, 7 Relikte und König-HP über den Run. Ein Autosave hält den Run (Profil-Slots kommen in M2). Ein abgebrochener Kampf startet am Knotenanfang neu.
+
+Entscheidungen beim Umsetzen (weichen teils von unten ab):
+- **Start:** Man wählt 1 aus T1/T2 des Builders. Einige T1 sind reine Support-Einheiten (z. B. die Pop Mine von Tinker) und halten Welle 1 allein nicht.
+- **Draft:**
+  - Jeder Builder hat genau 6 Basis-Fighter. Fehlende eigene im Tier-Fenster kommen zuerst, höchstens 2 pro Draft; der Rest kommt aus anderen Buildern.
+  - Tier-Fenster in Akt 1: T1–3, bei Elite und Boss +1.
+  - Roster-Cap 10. Beim Ersetzen bleiben gebaute Einheiten stehen.
+- **Wellen:** Battle und Elite spielen 2 Wellen. Die Wellenstufe hängt von der Zeile ab: (1,2) (2,3) (3,4) (5,6) (6,7) (8,9), der Boss spielt Welle 10.
+- **Karte:** Pro Zeile gibt es höchstens 1 Elite, 1 Shop und 1 Rest.
+- **Income:** `incomeAt(welle) = 4 + 2·welle` als Basis pro Knoten. König-Upgrades geben weiter +3.
+- **König:** Wellen-Buffs und Grants sind aus, weil sich Wellennummern über Knoten wiederholen. Der König wächst nur über Upgrades und Relikte.
+- **Preise (Lumber):** Relikt 90, Heilung 50 (+25 %), Rekrut 60. Draft überspringen: +20. Rest: +30 % HP oder +1 Wisp.
+
+Headless-Sim (`npx tsx tools/campaign/sim.ts all 3`, Bot spielt): 16/57 Runs gewonnen (28 %). Typische Bot-Niederlagen:
+- Wellen 5–6 (Gale Hawk), wenn der Bot bis dahin nur 1–2 Drafts hatte.
+- Boss: Drei Leaks der Warlord-Bosse töten den König.
+
+Für M4 mit Spielgefühl nachjustieren.
 
 ## 1. Ziel und Leitplanken
 
@@ -255,11 +281,12 @@ Die Kampagne lebt fast nur in neuen Dateien. Gemeinsame Berührungspunkte:
 
 ## 12. Offene Entscheidungen
 
-- Welche 3 Starter-Builder
-- Roster-Cap 10 ok? Was passiert beim Ersetzen mit schon gebauten Einheiten?
-- Wellen pro Knoten fix 2, oder Battle 2 und Elite 3?
-- Volle Heilung beim Aktwechsel, oder nur über Rest?
-- Income-Quelle ohne Sends
+- Welche 3 Starter-Builder (M2; bis dahin sind alle wählbar)
+- ~~Roster-Cap / Ersetzen~~ → Cap 10, gebaute Einheiten bleiben
+- ~~Wellen pro Knoten~~ → Battle 2, Elite 2 + Affix
+- Volle Heilung beim Aktwechsel, oder nur über Rest? (erst mit Akt 2 relevant)
+- ~~Income-Quelle ohne Sends~~ → steigendes Basis-Income, Werte per Sim/Spielgefühl justieren
+- Boss-Härte: 3 Leaks = König tot, ok so?
 - Renown-Raten und Freischaltkosten
 - endgültige Talentliste
 - Story: Namen des Königs und des Beraters, Akt-Regionen

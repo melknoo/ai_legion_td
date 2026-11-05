@@ -49,10 +49,12 @@ export class IntroCard {
     if (builder && !builder.random) {
       this.parts.push(scene.add.image(x + 8, y + 8, facesetKey(builderPortrait(builder))).setOrigin(0, 0).setDepth(depth));
     }
-    const you = `YOU: ${(builder?.name ?? '?').toUpperCase()}, `;
+    const you = `YOU: ${(builder?.name ?? '?').toUpperCase()}${game.pve ? '' : ', '}`;
     text(54, 9, you, ME_COLOR);
-    text(54 + you.length * 8, 9, `TEAM ${TEAM_NAMES[me.team]}`, teamColor(me.team));
-    text(54, 21, 'BUILD FIGHTERS ON YOUR GRID,\nKILL THE FOE KING TO WIN.', 0xe0e8ff).setLineSpacing(3);
+    // Campaign nodes have no teams: hold the lane until the node's waves are cleared.
+    if (!game.pve) text(54 + you.length * 8, 9, `TEAM ${TEAM_NAMES[me.team]}`, teamColor(me.team));
+    const goal = game.pve ? 'HOLD YOUR LANE AND KEEP THE\nKING ALIVE THROUGH THE WAVES.' : 'BUILD FIGHTERS ON YOUR GRID,\nKILL THE FOE KING TO WIN.';
+    text(54, 21, goal, 0xe0e8ff).setLineSpacing(3);
     this.parts.push(
       new TextButton(scene, x + W - 196, y + H - 21, 104, 'HOW TO PLAY', () => {
         this.close();

@@ -25,6 +25,54 @@ export interface GameConfig {
   players: PlayerConfig[];
   seed: number;
   data: GameData;
+  /** Campaign node (PvE): team 0 only, a slice of the waves, optionally resumed from a snapshot. */
+  campaign?: CampaignConfig;
+}
+
+/** A placed fighter in a campaign snapshot: enough to rebuild it in a fresh game. */
+export interface CampaignUnit {
+  owner: number;
+  /** Current def (upgrade stage; hatched fighter for morphs). */
+  def: string;
+  col: number;
+  row: number;
+  invested: number;
+}
+
+export interface CampaignPlayerStart {
+  gold: number;
+  lumber: number;
+  income: number;
+  workers: number;
+  farmLevel: number;
+  foodCap: number;
+  fighters: string[];
+}
+
+/** Army, economy and king between campaign nodes (taken in a build phase, so no creeps or shots). */
+export interface CampaignStart {
+  players: CampaignPlayerStart[];
+  units: CampaignUnit[];
+  king: { hp: number; levels: Record<KingStat, number> };
+}
+
+/** Elite modifiers on a node's wave creeps. */
+export interface CreepAffix {
+  hpMul?: number;
+  countMul?: number;
+  armor?: number;
+  regen?: number;
+  /** Fraction, 0.2 = +20 %. */
+  attackSpeed?: number;
+  abilities?: AbilityDef[];
+}
+
+export interface CampaignConfig {
+  /** First and last wave number (1-based) this node plays; clearing the last one wins the node. */
+  firstWave: number;
+  lastWave: number;
+  start?: CampaignStart;
+  affix?: CreepAffix;
 }
 
 export interface PlayerState {
@@ -179,6 +227,8 @@ export class Game implements GameView {
   /** Aura bonuses per unit, recomputed every fight tick. */
   private readonly auras = new Map<number, Record<AuraStat, number>>();
   private shots: Shot[] = [];
+  /** Campaign node settings; null in the classic modes. */
+  readonly campaign: CampaignConfig | null;
 
   constructor(config: GameConfig) {
     this.data = config.data;
@@ -203,6 +253,68 @@ export class Game implements GameView {
     for (const team of [0, 1] as const) {
       this.spawn(r.king.unit, 'king', -1, team, this.arenaOf(team), ARENA.kingX, ARENA.kingY);
     }
+    // Campaign: the team-1 king still exists (no special cases in the sim) but nothing ever reaches it.
+    this.campaign = config.campaign ?? null;
+    if (this.campaign) {
+      this.wave = this.campaign.firstWave;
+      this.phaseEndsAtMs = this.buildDurationMs(this.wave);
+      if (this.campaign.start) this.restore(this.campaign.start);
+    }
+  }
+
+  /** PvE campaign node: one team against the waves, no sends, no arena. */
+  get pve(): boolean {
+    return this.campaign !== null;
+  }
+
+  /** Snapshot for the next campaign node (call between waves or after the node is won). */
+  campaignState(): CampaignStart {
+    return {
+      players: this.players.map((p) => ({
+        gold: p.gold,
+        lumber: p.lumber,
+        income: p.income,
+        workers: p.workers,
+        farmLevel: p.farmLevel,
+        foodCap: p.foodCap,
+        fighters: [...p.fighters],
+      })),
+      units: [...this.units.values()]
+        .filter((u) => u.kind === 'fighter' && u.cell)
+        .map((u) => ({ owner: u.owner, def: u.def, col: u.cell!.col, row: u.cell!.row, invested: u.invested })),
+      king: { hp: this.king(0).hp, levels: { ...this.kingLevels[0] } },
+    };
+  }
+
+  private restore(start: CampaignStart): void {
+    start.players.forEach((s, i) => {
+      const p = this.players[i];
+      if (!p) return;
+      p.gold = s.gold;
+      p.lumber = s.lumber;
+      p.income = s.income;
+      p.workers = s.workers;
+      p.farmLevel = s.farmLevel;
+      p.foodCap = s.foodCap;
+      p.fighters = [...s.fighters];
+    });
+    for (const s of start.units) {
+      const p = this.players[s.owner];
+      if (!p || !Object.hasOwn(this.data.units, s.def) || !isValidCell(s.col, s.row)) continue;
+      this.place(p, s.def, s.col, s.row, s.invested);
+    }
+    const k = this.data.rules.king;
+    const levels = this.kingLevels[0];
+    levels.hp = start.king.levels.hp;
+    levels.attack = start.king.levels.attack;
+    levels.regen = start.king.levels.regen;
+    const king = this.king(0);
+    // Same gains as upgradeKing, summed over the levels bought.
+    for (let l = 1; l <= levels.hp; l++) king.mods.hp += k.hpBase + k.hpStep * l;
+    king.mods.damage = levels.attack * k.attackStep;
+    king.mods.regen = levels.regen * k.regenStep;
+    king.maxHp += king.mods.hp;
+    king.hp = Math.max(1, Math.min(king.maxHp, start.king.hp));
   }
 
   // ---- public API -------------------------------------------------------
@@ -292,14 +404,18 @@ export class Game implements GameView {
     if (player.gold < cost) return fail('not enough gold');
     if (this.foodUsed(player.index) + (def?.food ?? 0) > player.foodCap) return fail('not enough food');
     player.gold -= cost;
-    const { x, y } = cellCenter(col, row);
     // A morph hatches into a random fighter of its tier from the other builders.
     const placed = def?.morph ? this.rng.pick(this.morphPool(def.morph)) ?? unitId : unitId;
-    const u = this.spawn(placed, 'fighter', player.index, player.team, player.index, x, y);
-    u.cell = { col, row };
-    u.invested = cost;
-    u.fresh = true;
+    this.place(player, placed, col, row, cost).fresh = true;
     return { ok: true };
+  }
+
+  private place(player: PlayerState, defId: string, col: number, row: number, invested: number): UnitState {
+    const { x, y } = cellCenter(col, row);
+    const u = this.spawn(defId, 'fighter', player.index, player.team, player.index, x, y);
+    u.cell = { col, row };
+    u.invested = invested;
+    return u;
   }
 
   /** Prophet roster: one random base fighter per tier. */
@@ -365,6 +481,7 @@ export class Game implements GameView {
 
   private sendMerc(player: PlayerState, mercId: string): CommandResult {
     if (this.phase !== 'build' && this.phase !== 'fight') return fail('no sends right now');
+    if (this.campaign) return fail('no sends in the campaign');
     // Own keys only: 'constructor' and friends would otherwise pass as a merc.
     const merc = typeof mercId === 'string' && Object.hasOwn(this.data.mercs, mercId) ? this.data.mercs[mercId] : undefined;
     if (!merc) return fail('unknown merc');
@@ -439,7 +556,9 @@ export class Game implements GameView {
     this.phase = 'fight';
     this.phaseEndsAtMs = this.timeMs + this.data.rules.maxFightMs;
     for (const u of this.units.values()) u.fresh = false;
-    this.spawnQueue = this.players.map(() => wave.count);
+    const countMul = this.campaign?.affix?.countMul;
+    const count = countMul ? Math.max(1, Math.round(wave.count * countMul)) : wave.count;
+    this.spawnQueue = this.players.map(() => count);
     this.nextSpawnMs = this.timeMs;
     if (wave.endless) {
       this.finaleGapS = this.data.rules.finaleFirstIntervalS;
@@ -484,8 +603,9 @@ export class Game implements GameView {
     for (const grant of r.king.grants ?? []) {
       if (grant.wave === this.wave) for (const team of [0, 1] as const) this.king(team).granted.push(grant.ability);
     }
-    const arena = r.arenaWaves.includes(this.wave);
+    const arena = !this.campaign && r.arenaWaves.includes(this.wave);
     this.wave++;
+    if (this.campaign && this.wave > this.campaign.lastWave) return this.gameOver(0);
     if (this.wave > this.data.waves.length) return this.finish();
     this.startBuild(arena);
   }
@@ -1001,6 +1121,14 @@ export class Game implements GameView {
     const u = this.spawn(unitId, kind, -1, lane.team === 0 ? 1 : 0, lane.index, x, y);
     if (kind === 'creep') {
       u.maxHp = Math.round(u.maxHp * this.data.rules.creepHpMultiplier);
+      const affix = this.campaign?.affix;
+      if (affix) {
+        if (affix.hpMul) u.maxHp = Math.round(u.maxHp * affix.hpMul);
+        u.mods.armor += affix.armor ?? 0;
+        u.mods.regen += affix.regen ?? 0;
+        u.mods.attackSpeed += affix.attackSpeed ?? 0;
+        if (affix.abilities) u.granted.push(...affix.abilities);
+      }
       u.hp = u.maxHp;
     }
   }

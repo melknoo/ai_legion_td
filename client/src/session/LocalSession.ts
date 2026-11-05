@@ -6,6 +6,7 @@ import {
   botCommands,
   modeLocksBuilder,
   rollableBuilders,
+  type CampaignConfig,
   type Command,
   type CommandResult,
   type GameData,
@@ -29,6 +30,8 @@ export interface LocalOptions {
   seed?: number;
   /** A bot plays the local seat too (showcase clips). */
   autopilot?: boolean;
+  /** Campaign node: the local player alone against the waves (config.builder; teamSize, mode and foe unused). */
+  campaign?: CampaignConfig;
 }
 
 /** Runs the simulation in the browser: the local player plus bot allies and opponents. */
@@ -41,8 +44,12 @@ export class LocalSession implements Session {
   /** First seat a bot plays: 0 when the local seat runs on autopilot. */
   private readonly firstBot: number;
 
-  constructor(data: GameData, config: SoloConfig, { seed = Date.now() % 100000, autopilot = false }: LocalOptions = {}) {
+  constructor(data: GameData, config: SoloConfig, { seed = Date.now() % 100000, autopilot = false, campaign }: LocalOptions = {}) {
     this.firstBot = autopilot ? 0 : 1;
+    if (campaign) {
+      this.game = new Game({ seed, data, players: [{ id: 'you', name: 'You', team: 0, builder: config.builder }], campaign });
+      return;
+    }
     // A seeded game rolls its builders from the seed as well, so it replays exactly.
     const rng = new Rng(seed);
     const ids = rollableBuilders(data);

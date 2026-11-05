@@ -17,6 +17,8 @@ export interface GameView {
   readonly arenaNext: boolean;
   readonly winner: TeamId | null;
   readonly kingLevels: Record<TeamId, Record<KingStat, number>>;
+  /** Campaign node: one team against the waves (no foe king, foe lanes, sends or arena to show). */
+  readonly pve: boolean;
   def(unit: UnitState): UnitDef;
   arenaOf(team: TeamId): number;
   isLane(area: number): boolean;

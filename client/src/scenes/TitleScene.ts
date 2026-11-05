@@ -140,13 +140,14 @@ export class TitleScene extends Phaser.Scene {
     if (panel === 'main') {
       this.items = [
         { label: () => 'SOLO GAME', action: () => this.show('solo') },
+        { label: () => 'CAMPAIGN', action: () => this.scene.start('campaign') },
         { label: () => 'CREATE ONLINE GAME', action: () => this.show('create') },
         { label: () => 'JOIN ONLINE GAME', action: () => this.openList() },
         { label: () => 'HOW TO PLAY', action: () => this.openHelp() },
         { label: () => `NAME: ${this.name}`, action: () => this.show('name') },
         { label: () => 'OPTIONS', action: () => this.show('options') },
       ];
-      this.window(150, 146, 180, 94);
+      this.window(150, 132, 180, 108);
     } else if (panel === 'solo') {
       this.items = [
         { label: () => `MODE      < ${MODES[this.solo.mode].name} >`, change: (s) => this.cycleMode(s), action: () => this.cycleMode(1) },

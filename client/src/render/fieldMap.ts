@@ -24,7 +24,7 @@ export interface MapSlot {
 
 /**
  * The battlefield as one map: every lane and arena stacked top to bottom (own lanes, own king,
- * the arena battle, the foe king, foe lanes), so the camera scrolls between them. The sim keeps
+ * the arena battle, the foe king, foe lanes; campaign: own lanes and king only), so the camera scrolls between them. The sim keeps
  * its own coordinates per area; this only places the areas on the screen.
  */
 export class FieldMap {
@@ -46,6 +46,8 @@ export class FieldMap {
     const king = (team: TeamId) => this.add({ area: game.arenaOf(team), kind: 'king', label: team === myTeam ? 'YOUR KING' : 'FOE KING', color: teamColor(team), team });
     for (const p of lanes(myTeam)) lane(p.index);
     king(myTeam);
+    // Campaign: one team against the waves; the foe king, foe lanes and the arena don't exist for the player.
+    if (game.pve) return;
     this.add({ area: game.battleArena(), kind: 'arena', label: `ARENA BATTLE - AFTER WAVE ${game.data.rules.arenaWaves.join(', ')}`, color: 0xe0e0f0 });
     king(foeTeam);
     for (const p of lanes(foeTeam)) lane(p.index);
@@ -59,6 +61,11 @@ export class FieldMap {
     this.slots.push(slot);
     this.byArea.set(s.area, slot);
     this.height = slot.y + slot.h;
+  }
+
+  /** The area is on the map (the campaign leaves the foe side out). */
+  has(area: number): boolean {
+    return this.byArea.has(area);
   }
 
   slot(area: number): MapSlot {

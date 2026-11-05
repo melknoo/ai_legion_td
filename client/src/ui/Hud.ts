@@ -116,7 +116,7 @@ export class Hud {
   /** Creeps and sends still alive on each team's side, next to its king bar. */
   private readonly alive: Phaser.GameObjects.BitmapText[];
   private readonly slots: SlotButton[];
-  private readonly tabs: Record<SlotMode, ModeTab>;
+  private readonly tabs: Partial<Record<SlotMode, ModeTab>>;
   private readonly hand: Phaser.GameObjects.Image;
   private readonly portrait: Phaser.GameObjects.Image;
   private readonly infoName: Phaser.GameObjects.BitmapText;
@@ -165,8 +165,9 @@ export class Hud {
     ff6Window(scene, 2, 1, 476, 23);
     this.topText = scene.add.bitmapText(8, 4, FONT, '').setLineSpacing(2);
     const myTeam = game.players[player]!.team;
-    scene.add.bitmapText(252, 4, FONT, 'MY').setTint(teamColor(myTeam));
-    scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(teamColor(myTeam === 0 ? 1 : 0));
+    // Campaign: just your king (no foe side).
+    scene.add.bitmapText(252, game.pve ? 9 : 4, FONT, game.pve ? 'KING' : 'MY').setTint(teamColor(myTeam));
+    if (!game.pve) scene.add.bitmapText(252, 14, FONT, 'FOE').setTint(teamColor(myTeam === 0 ? 1 : 0));
     this.kingBars = scene.add.graphics().setDepth(HUD_GFX_DEPTH);
     this.alive = [0, 1].map((row) => scene.add.bitmapText(474, 4 + row * 10, FONT, '').setOrigin(1, 0));
     // Next wave: hover shows it in the info panel, a click (or I) pins it there.
@@ -197,10 +198,10 @@ export class Hud {
       food: scene.add.bitmapText(RES_X + 64, 14, FONT, ''),
     };
 
-    // Command card: three tabs (1 BUILD, 2 SEND, 3 KING), then the 4x3 slots (QWER / ASDF / YXCV).
+    // Command card: three tabs (1 BUILD, 2 SEND, 3 KING; the campaign has no sends), then the 4x3 slots (QWER / ASDF / YXCV).
     ff6Window(scene, CARD.x, HUD_Y, CARD.w, HUD_H);
     this.tabs = Object.fromEntries(
-      MODE_TABS.map((t, i) => [
+      MODE_TABS.filter((t) => !(game.pve && t.mode === 'send')).map((t, i) => [
         t.mode,
         new ModeTab(scene, {
           x: TAB.x,
@@ -214,7 +215,7 @@ export class Hud {
           onHover: hoverFn({ on: 'mode', mode: t.mode }),
         }),
       ]),
-    ) as Record<SlotMode, ModeTab>;
+    ) as Partial<Record<SlotMode, ModeTab>>;
     this.slots = SLOT_KEYS.map((_, i) =>
       new SlotButton(scene, {
         x: SLOT.x + (i % 4) * (SLOT.w + 1),
@@ -294,9 +295,9 @@ export class Hud {
     const sends = Object.values(g.data.mercs);
     const pages = Math.ceil(sends.length / SEND_PAGE_SIZE);
     const build = g.phase === 'build';
-    this.tabs.build.setState(s.slotMode === 'build');
-    this.tabs.send.setState(send, send && pages > 1 ? `${s.sendPage + 1}/${pages}` : '');
-    this.tabs.king.setState(s.slotMode === 'king');
+    this.tabs.build?.setState(s.slotMode === 'build');
+    this.tabs.send?.setState(send, send && pages > 1 ? `${s.sendPage + 1}/${pages}` : '');
+    this.tabs.king?.setState(s.slotMode === 'king');
     this.hand.setVisible(false);
     const wave = g.data.waves[g.wave - 1];
     const creep = wave ? g.data.units[wave.creep] : undefined;
@@ -693,20 +694,22 @@ export class Hud {
   private drawTop(): void {
     const g = this.game;
     const secs = Math.max(0, Math.ceil((g.phaseEndsAtMs - g.timeMs) / 1000));
-    const phase = g.phase === 'build' ? `${g.arenaNext ? 'ARENA' : 'BUILD'} ${secs}s` : g.phase === 'fight' ? 'FIGHT!' : g.phase === 'arena' ? 'ARENA!' : 'GAME OVER';
-    this.topText.setText(`WAVE ${g.wave}/${g.data.waves.length}\n${phase}`);
+    const phase = g.phase === 'build' ? `${g.arenaNext ? 'ARENA' : 'BUILD'} ${secs}s` : g.phase === 'fight' ? 'FIGHT!' : g.phase === 'arena' ? 'ARENA!' : g.pve ? 'NODE OVER' : 'GAME OVER';
+    this.topText.setText(`${g.pve ? `WAVE ${g.wave}` : `WAVE ${g.wave}/${g.data.waves.length}`}\n${phase}`);
     const myTeam = g.players[this.player]!.team;
     const bars = this.kingBars.clear();
     const attackers = this.attackersAlive();
-    ([myTeam, myTeam === 0 ? 1 : 0] as const).forEach((team, row) => {
+    const teams: TeamId[] = g.pve ? [myTeam] : [myTeam, myTeam === 0 ? 1 : 0];
+    teams.forEach((team, row) => {
       const k = g.king(team);
-      const { x, w } = KING_BAR;
-      const y = 6 + row * 10;
+      // Campaign: one bar, centred in the top bar, right of the longer "KING" label.
+      const { x, w } = g.pve ? { x: KING_BAR.x + 8, w: KING_BAR.w - 8 } : KING_BAR;
+      const y = g.pve ? 11 : 6 + row * 10;
       bars.fillStyle(0x000000, 0.7).fillRect(x, y, w, 5);
       bars.fillStyle(team === 0 ? 0x60a0ff : 0xff6060, 1).fillRect(x + 1, y + 1, Math.ceil((w - 2) * (k.hp / k.maxHp)), 3);
       // Who clears the wave faster: enemies left on this team's lanes and at its king.
       const n = attackers[team];
-      this.alive[row]!.setText(g.phase === 'build' ? '' : `${n}`).setTint(n ? 0xffffff : 0x80ff90);
+      this.alive[row]!.setText(g.phase === 'build' ? '' : `${n}`).setTint(n ? 0xffffff : 0x80ff90).setY(g.pve ? 9 : 4 + row * 10);
     });
     this.drawWaveButton();
   }

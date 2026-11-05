@@ -1,5 +1,23 @@
 import Phaser from 'phaser';
-import { CELL, LANE, LEGION_DATA, MELEE_RANGE, MODE_IDS, STATUS, type AttackType, type ModeId, type AuraStat, type GameEvent, type KingStat, type TeamId, type UnitState } from '@legion/shared';
+import {
+  CELL,
+  LANE,
+  LEGION_DATA,
+  MELEE_RANGE,
+  MODE_IDS,
+  STATUS,
+  finishBattle,
+  nodeBattle,
+  type AttackType,
+  type AuraStat,
+  type GameData,
+  type GameEvent,
+  type KingStat,
+  type ModeId,
+  type RunState,
+  type TeamId,
+  type UnitState,
+} from '@legion/shared';
 import { DIR, KING_SPRITES, UNIT_SPRITES, spriteKey, type FxKey, type SoundKey } from '../assets/manifest.ts';
 import { CANVAS_W, FIELD_H, FIELD_TOP, FIELD_ZOOM as HUD_FIELD_ZOOM, SCALE, SHOWCASE, UI_ZOOM, VIEW_W } from '../layout.ts';
 import { SHOWCASE_FIELD, showcaseParams, type ShowcaseScene } from '../showcase/ShowcaseScene.ts';
@@ -7,6 +25,7 @@ import { ellipseTexture } from '../render/ellipse.ts';
 import { FieldMap, LANE_PX, MAP_GAP, type MapSlot } from '../render/fieldMap.ts';
 import { FX_SOUND, SHOT_SOUND, sfx } from '../audio/sfx.ts';
 import { clearRejoin } from '../net/rejoin.ts';
+import { saveRun } from '../campaign/save.ts';
 import { attackStyle } from '../render/attackStyle.ts';
 import { settings } from '../settings.ts';
 import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
@@ -92,6 +111,8 @@ export class BattleScene extends Phaser.Scene {
   private session!: Session;
   /** Solo setup, kept for "play again"; null online. */
   private solo: SoloConfig | null = null;
+  /** Campaign run whose node this game is (null outside the campaign). */
+  private campaign: RunState | null = null;
   /** Tells the server's stats page about this solo game; null online. */
   private soloReport: SoloReport | null = null;
   /** Index of the local player in the game. */
@@ -142,10 +163,11 @@ export class BattleScene extends Phaser.Scene {
     super('battle');
   }
 
-  /** Online games hand in their session; solo games their setup (or take it from the URL). */
-  init(data?: { session?: Session; solo?: SoloConfig }): void {
-    this.solo = data?.solo ?? (data?.session ? null : soloFromUrl());
-    this.session = data?.session ?? this.localSession(this.solo!);
+  /** Online games hand in their session; solo games their setup (or take it from the URL); campaign nodes their run. */
+  init(data?: { session?: Session; solo?: SoloConfig; campaign?: RunState }): void {
+    this.campaign = data?.campaign ?? null;
+    this.solo = this.campaign ? null : (data?.solo ?? (data?.session ? null : soloFromUrl()));
+    this.session = data?.session ?? (this.campaign ? this.campaignSession(this.campaign) : this.localSession(this.solo!));
     this.me = this.session.localPlayer;
     this.session.onError = (message) => this.ui.floatText(message.toUpperCase(), 0xff6060);
     this.session.onConnection = (status) => {
@@ -160,10 +182,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private localSession(config: SoloConfig): Session {
-    // Dev aid: `?fast` shortens build phases for quick playtests.
-    const data = new URLSearchParams(location.search).has('fast')
-      ? { ...LEGION_DATA, rules: { ...LEGION_DATA.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0, arenaBuildMs: 8000 } }
-      : LEGION_DATA;
+    const data = devData(LEGION_DATA);
     // Dev aid: `?auto` lets a bot play the own seat in a normal game (HUD screenshots, promo clips);
     // `seed`/`wave` work as in showcase clips.
     if (!SHOWCASE && !new URLSearchParams(location.search).has('auto')) return new LocalSession(data, config);
@@ -171,6 +190,31 @@ export class BattleScene extends Phaser.Scene {
     const session = new LocalSession(data, config, { seed, autopilot: true });
     if (wave > 1) session.skipToWave(wave);
     return session;
+  }
+
+  /** The run's current combat node: one player against its waves, starting from the run's army. */
+  private campaignSession(run: RunState): Session {
+    const battle = nodeBattle(run, LEGION_DATA);
+    if (!battle) throw new Error('campaign run is not in a battle');
+    const autopilot = new URLSearchParams(location.search).has('auto');
+    return new LocalSession(devData(battle.data), { builder: run.builder, teamSize: 1, mode: 'ap' }, { seed: battle.seed, campaign: battle.campaign, autopilot });
+  }
+
+  /** Campaign node over: the run moves on (saved at once, so a reload can't replay the node), then the banner. */
+  private endNode(winner: TeamId | null): void {
+    const run = this.campaign!;
+    const game = this.session.game;
+    const me = game.players[this.me]!;
+    const won = winner === me.team;
+    const node = nodeBattle(run, LEGION_DATA)?.node;
+    this.campaign = finishBattle(run, LEGION_DATA, { won, state: won ? (this.session as LocalSession).game.campaignState() : undefined, leaks: me.leaks });
+    saveRun(this.campaign);
+    sfx(this, won ? 'win' : 'lose');
+    const title = !won ? 'DEFEAT...' : this.campaign.status === 'won' ? 'ACT CLEARED!' : node?.kind === 'elite' ? 'ELITE DEFEATED!' : 'BATTLE WON!';
+    const reason = won ? `${me.leaks ? `${me.leaks} LEAKS` : 'NO LEAKS'}` : `YOUR KING FELL IN WAVE ${game.wave}`;
+    const keys = TOUCH ? [] : ['', 'ENTER: CONTINUE'];
+    const bottom = this.ui.showBanner([title, reason, ...keys], 0);
+    this.ui.showChoices(bottom + 4, [{ label: 'CONTINUE', action: () => this.toMenu() }]);
   }
 
   create(): void {
@@ -412,6 +456,7 @@ export class BattleScene extends Phaser.Scene {
     });
     key('keydown-ESC', () => !this.ui.introOpen && (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
     key('keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
+    key('keydown-ENTER', () => this.campaign && this.session.game.phase === 'over' && this.toMenu());
     key('keydown-U', () => this.upgradeSelected());
     key('keydown-DELETE', () => this.sellSelected());
     key('keydown-BACKSPACE', () => this.sellSelected());
@@ -515,6 +560,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Tab key or click; a second one on the send tab turns its page. */
   private pickMode(mode: SlotMode): void {
+    if (mode === 'send' && this.session.game.pve) return;
     if (mode === 'send' && this.mode === 'send') this.nextSendPage();
     else this.setSlotMode(mode);
   }
@@ -546,7 +592,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private nextSendPage(): void {
-    this.sendPage = (this.sendPage + 1) % Math.ceil(this.sends().length / SEND_PAGE_SIZE);
+    const pages = Math.ceil(this.sends().length / SEND_PAGE_SIZE);
+    if (pages) this.sendPage = (this.sendPage + 1) % pages;
   }
 
   private buyWorker(): void {
@@ -632,12 +679,17 @@ export class BattleScene extends Phaser.Scene {
 
   /** Solo: same setup once more; online games go back to the menu. */
   private playAgain(): void {
-    if (!this.solo) return this.toMenu();
+    if (!this.solo || this.campaign) return this.toMenu();
     this.scene.stop('ui');
     this.scene.restart({ solo: this.solo });
   }
 
   private toMenu(): void {
+    if (this.campaign) {
+      this.scene.stop('ui');
+      this.scene.start('campaign', { run: this.campaign });
+      return;
+    }
     if (this.session.online) {
       void (this.session as NetSession).room.leave();
       clearRejoin();
@@ -947,7 +999,8 @@ export class BattleScene extends Phaser.Scene {
           for (const view of this.views.values()) view.fought = false;
         }
         if (ev.phase === 'fight') {
-          this.slotMode = 'send';
+          // Campaign nodes have no sends: the card stays where it was.
+          if (!game.pve) this.slotMode = 'send';
           this.selectedBuild = null;
           this.soloReport?.wave();
         }
@@ -1012,6 +1065,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       case 'gameOver':
+        if (this.campaign) return this.endNode(ev.winner);
         this.soloReport?.end(ev.winner, false);
         this.showGameOver(ev.winner);
         return;
@@ -1158,6 +1212,12 @@ export class BattleScene extends Phaser.Scene {
 }
 
 /** Dev deep link: `?builder=grove&size=2&mode=ar` (ap, ar, sd, apr) starts a solo game directly. */
+/** Dev aid: `?fast` shortens build phases for quick playtests. */
+function devData(data: GameData): GameData {
+  if (!new URLSearchParams(location.search).has('fast')) return data;
+  return { ...data, rules: { ...data.rules, firstBuildMs: 8000, buildBaseMs: 8000, buildPerWaveMs: 0, arenaBuildMs: 8000 } };
+}
+
 function soloFromUrl(): SoloConfig {
   const params = new URLSearchParams(location.search);
   const builders = Object.keys(LEGION_DATA.builders);

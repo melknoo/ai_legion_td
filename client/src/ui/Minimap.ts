@@ -105,7 +105,9 @@ export class Minimap {
     const { map } = this.link;
     const now = this.scene.time.now;
     const g = this.g.clear();
-    for (const team of [0, 1] as const) {
+    for (const slot of map.slots) {
+      if (slot.team === undefined) continue;
+      const team = slot.team;
       const hp = this.game.king(team).hp;
       if (hp < this.lastKingHp[team]) this.kingHurtAt[team] = now;
       this.lastKingHp[team] = hp;
@@ -122,7 +124,7 @@ export class Minimap {
     });
     // A dot per unit: fighters in their owner's colour, creeps red, sends orange, kings bigger.
     for (const u of this.game.units.values()) {
-      if (u.dead) continue;
+      if (u.dead || !map.has(u.area)) continue;
       const p = map.toField(u.area, u.x, u.y);
       const x = this.x + Math.floor(p.x * this.sx);
       const y = Math.floor(this.toMini(p.y));

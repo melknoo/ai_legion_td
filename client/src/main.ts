@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DESKTOP } from './desktop.ts';
 import { installErrorReporting } from './errorReport.ts';
 import { CANVAS_H, CANVAS_W } from './layout.ts';
+import { CampaignScene } from './campaign/CampaignScene.ts';
 import { BattleScene } from './scenes/BattleScene.ts';
 import { BootScene } from './scenes/BootScene.ts';
 import { LobbyScene } from './scenes/LobbyScene.ts';
@@ -39,7 +40,7 @@ const game = new Phaser.Game({
   roundPixels: true,
   backgroundColor: '#0b0b18',
   scale: { mode: Phaser.Scale.NONE, zoom: zoomFor(), autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, TitleScene, LobbyScene, BattleScene, UiScene, ShowcaseScene],
+  scene: [BootScene, TitleScene, LobbyScene, BattleScene, UiScene, ShowcaseScene, CampaignScene],
 });
 
 window.addEventListener('resize', () => game.scale.setZoom(zoomFor()));

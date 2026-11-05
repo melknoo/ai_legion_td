@@ -82,6 +82,8 @@ export class NetGameView implements GameView {
   arenaNext = false;
   winner: TeamId | null = null;
   kingLevels: Record<TeamId, Record<KingStat, number>> = { 0: { hp: 0, attack: 0, regen: 0 }, 1: { hp: 0, attack: 0, regen: 0 } };
+  /** Online games are never campaign nodes. */
+  readonly pve = false;
 
   constructor(readonly data: GameData) {}
 

@@ -181,6 +181,14 @@ export const ICONS: Record<string, string> = Object.fromEntries(
     'btn-sell': `${SKILL}/Items & Weapon/Money.png`,
     'btn-view': `${SKILL}/Spell/Vision.png`,
     'btn-farm': `${SKILL}/Job & Action/Plant.png`,
+    // Campaign map nodes and relics (24x24 like the buttons).
+    'node-battle': `${SKILL}/Spell/Cut.png`,
+    'node-elite': `${SKILL}/Items & Weapon/Helmet.png`,
+    'node-boss': `${SKILL}/Spell/Death.png`,
+    'node-shop': `${SKILL}/Items & Weapon/Money.png`,
+    'node-rest': `${SKILL}/Job & Action/Cook.png`,
+    'node-treasure': `${SKILL}/Items & Weapon/Ring.png`,
+    'icon-relic': `${SKILL}/Items & Weapon/Amulet.png`,
   }).map(([k, v]) => [k, encodeURI(v)]),
 );
 export const FONT_PATH = `${BASE}/Ui/Font/font8x8.png`;

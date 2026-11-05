@@ -9,3 +9,4 @@ export * from './sim/view.ts';
 export * from './sim/bot.ts';
 export * from './net/protocol.ts';
 export * from './sim/abilities.ts';
+export * from './campaign/index.ts';

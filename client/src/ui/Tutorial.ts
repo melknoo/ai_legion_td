@@ -118,11 +118,18 @@ export class Tutorial {
   private outline: Phaser.GameObjects.Container | null = null;
   private optOut = false;
 
+  /** The campaign has no sends and no other lanes; its command card has two tabs (KING is the second). */
+  private readonly tips: Tip[];
+
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly game: GameView,
     private readonly player: number,
-  ) {}
+  ) {
+    this.tips = game.pve
+      ? TIPS.filter((t) => t.id !== 'sends' && t.id !== 'map').map((t) => (t.id === 'wisps' || t.id === 'king' ? { ...t, spot: tab(1) } : t))
+      : TIPS;
+  }
 
   update(): void {
     if (this.restarts !== restarts) {
@@ -137,7 +144,7 @@ export class Tutorial {
       this.nudged.add(nudge.id);
       return this.show(nudge, false);
     }
-    const tip = TIPS[this.next];
+    const tip = this.tips[this.next];
     if (tip?.when(this.game, me)) this.show(tip, true);
   }
 

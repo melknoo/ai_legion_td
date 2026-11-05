@@ -81,9 +81,11 @@ export class BootScene extends Phaser.Scene {
       for (const sheet of spriteSheets(spec)) bakeHue(this.textures, `${spriteBaseKey(spec)}-${sheet}`, `${spriteKey(spec)}-${sheet}`, spec.hue);
     }
     this.createAnimations();
-    // Deep links: `?room=CODE` / `?online` open the lobby, `?builder=...` a solo game; otherwise the title.
+    // Deep links: `?room=CODE` / `?online` open the lobby, `?campaign` the campaign (`&builder=` starts a run),
+    // `?builder=...` a solo game; otherwise the title.
     const params = new URLSearchParams(location.search);
     if (params.has('online') || params.has('room')) this.scene.start('lobby');
+    else if (params.has('campaign')) this.scene.start('campaign');
     else if (params.has('builder') || SHOWCASE) this.scene.start('battle');
     else this.scene.start('title');
   }
