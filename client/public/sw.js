@@ -23,6 +23,8 @@ self.addEventListener('fetch', (event) => {
   // The page: network first so a deploy shows up at once, the cached copy when offline.
   // Every deep link (?room=...) is the same page.
   if (req.mode === 'navigate') {
+    // Other pages (legal.html) are not the game: straight to the network, never into the game's cache slot.
+    if (url.pathname.endsWith('.html') && url.pathname !== '/index.html') return;
     event.respondWith(
       fetch(req)
         .then((res) => {

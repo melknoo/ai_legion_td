@@ -34,6 +34,13 @@ export interface LocalOptions {
   campaign?: CampaignConfig;
 }
 
+/**
+ * Longest stretch of real time one update catches up on. The game keeps running in the background
+ * (BattleScene pumps it while the tab is hidden, where timers fire rarely); a laptop waking from sleep
+ * shouldn't simulate hours at once.
+ */
+export const MAX_CATCHUP_MS = 120_000;
+
 /** Runs the simulation in the browser: the local player plus bot allies and opponents. */
 export class LocalSession implements Session {
   readonly game: Game;
@@ -67,7 +74,7 @@ export class LocalSession implements Session {
   }
 
   update(deltaMs: number): GameEvent[] {
-    this.acc += Math.min(deltaMs, 250);
+    this.acc += Math.min(deltaMs, MAX_CATCHUP_MS);
     const events: GameEvent[] = [];
     while (this.acc >= TICK_MS) {
       this.acc -= TICK_MS;

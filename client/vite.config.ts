@@ -56,7 +56,11 @@ function clipSink(): Plugin {
   };
 }
 
+const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
+  // Shown on the title screen, so feedback can name the build.
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // Listen on the LAN too, so friends can join a local game server.
   server: { port: 5173, host: true },
   plugins: [swVersion(), clipSink()],

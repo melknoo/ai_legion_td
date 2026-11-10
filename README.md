@@ -39,7 +39,8 @@ Controls (everything also works with the mouse via the HUD):
 - `I` or the wave button in the top bar (next to the king bars): pin the next wave's preview in the info panel; click again, `Esc` or selecting a unit unpins it
 - click a unit to select it (any unit, including creeps and enemies; hover shows its HP and stats); a dashed red line and ring mark what the selected or hovered unit attacks; `U` upgrade, `Del` sell
 - damage numbers only show hits by your own units; your own units flash red when they are hit
-- `Esc` / right click: cancel placement and selection
+- `Esc` / right click: cancel placement and selection; with nothing selected `Esc` pauses a solo or campaign game
+- `P` or the `P` button in the top bar: pause menu (solo and campaign only: resume, options, how to play, quit / back to the map). Without it the game keeps running in the background, also in an inactive tab or behind other windows
 - `B` buy wisp, `G` farm, `H/J/K` king HP/attack/regen: the KING tab's buys, from any tab
 - `SPACE`: jump to my lane (again: my king)
 - `O` or the `O` button in the top bar: options (sound on/off, volume, screen shake, tips; turning tips back on replays them, HOW TO PLAY opens the rules pages); also on the title screen, which has its own HOW TO PLAY entry

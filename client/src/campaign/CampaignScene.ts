@@ -208,11 +208,24 @@ export class CampaignScene extends Phaser.Scene {
       const where = node ? `ROW ${node.row}` : 'START';
       items.push({ label: `CONTINUE: ${upper(D.builders[ongoing.builder]?.name ?? '?')}, ACT ${ongoing.act} ${where}`, action: () => this.resume(ongoing) });
     }
-    items.push({ label: ongoing ? 'NEW RUN (ENDS THE CURRENT ONE)' : 'NEW RUN', action: () => this.showBuilders() });
+    items.push({ label: ongoing ? 'NEW RUN (ENDS THE CURRENT ONE)' : 'NEW RUN', action: () => (ongoing ? this.confirmNewRun() : this.showBuilders()) });
     items.push({ label: 'BACK', action: () => this.toTitle() });
     this.listMenu(80, 120, 320, items);
+    this.keep(this.add.bitmapText(VIEW_W / 2, 84, FONT, 'PREVIEW: ACT 1 OF 3').setOrigin(0.5).setTint(DIM));
     if (!saved.run && 'broken' in saved && saved.broken) this.text(80, 186, 'THE OLD SAVE CAN NOT BE READ.\nA NEW RUN REPLACES IT.', BAD);
     this.keys.ESC = () => this.toTitle();
+  }
+
+  /** A new run replaces the saved one for good: ask first. */
+  private confirmNewRun(): void {
+    this.clear();
+    this.keep(this.add.bitmapText(VIEW_W / 2, 90, FONT, 'END THE CURRENT RUN?').setOrigin(0.5).setScale(2).setTint(BAD));
+    this.keep(this.add.bitmapText(VIEW_W / 2, 112, FONT, 'ITS ARMY AND RELICS ARE LOST.').setOrigin(0.5).setTint(DIM));
+    this.listMenu(140, 130, 200, [
+      { label: 'KEEP IT', action: () => this.showStart() },
+      { label: 'START A NEW RUN', action: () => this.showBuilders() },
+    ]);
+    this.keys.ESC = () => this.showStart();
   }
 
   private resume(run: RunState): void {
@@ -625,8 +638,10 @@ export class CampaignScene extends Phaser.Scene {
       (i) => this.take(shopBuy(run, D, i)),
       (i) => !run.shop[i]!.sold && lumber >= run.shop[i]!.price,
     );
-    this.button(VIEW_W / 2 - 40, 204, 80, 'LEAVE', () => this.take(leaveShop(run)), depth + 2);
-    this.keys.ESC = () => this.take(leaveShop(run));
+    // Leaving is final, so Esc (the reflex for "back") only goes to the menu; the run stays in the shop.
+    this.button(VIEW_W / 2 - 50, 204, 100, TOUCH ? 'LEAVE' : 'LEAVE (S)', () => this.take(leaveShop(run)), depth + 2);
+    this.keys.S = () => this.take(leaveShop(run));
+    this.keys.ESC = () => this.toTitle();
   }
 
   private restOverlay(): void {
@@ -637,7 +652,7 @@ export class CampaignScene extends Phaser.Scene {
     this.window(100, 50, 280, 170, depth);
     this.text(116, 60, 'REST BY THE FIRE', GOLD, depth);
     const max = kingMax(run, D);
-    const healTo = Math.min(max, run.army.king.hp + Math.round(max * REST_HEAL));
+    const healTo = Math.round(Math.min(max, run.army.king.hp + Math.round(max * REST_HEAL)));
     const train = me.workers < D.rules.maxWorkers ? 'ONE MORE WISP GATHERS LUMBER' : `WISPS MAXED: +${D.rules.workerCost} GOLD`;
     const options: [string, string, string][] = [
       ['btn-regen', 'HEAL', `KING +${Math.round(REST_HEAL * 100)}% HP (${Math.round(run.army.king.hp)} TO ${healTo})`],

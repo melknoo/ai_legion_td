@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { GameView } from '@legion/shared';
 import type { ChatLog } from '../net/ChatLog.ts';
 import { ChatBox } from '../ui/ChatBox.ts';
-import { FIELD_H, FIELD_TOP, SHOWCASE, VIEW_W, layoutCamera } from '../layout.ts';
+import { FIELD_H, FIELD_TOP, SHOWCASE, VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
 import { ff6Window } from '../ui/ff6Window.ts';
 import { Hud, type HudActions, type HudState } from '../ui/Hud.ts';
 import { Minimap, type MinimapLink } from '../ui/Minimap.ts';
@@ -28,6 +28,10 @@ export interface UiLink {
   state(): HudState;
   /** Online games only. */
   chat?: ChatLog;
+  /** Solo games only: the pause button in the top bar. */
+  pause?: () => void;
+  /** Campaign elites: two lines for the intro card in place of the goal. */
+  notice?: [string, string];
 }
 
 /**
@@ -47,6 +51,7 @@ export class UiScene extends Phaser.Scene {
   private choices: TextButton[] = [];
   private chatBox: ChatBox | null = null;
   private intro!: IntroCard;
+  private pauseMenu: { destroy(): void }[] | null = null;
 
   constructor() {
     super('ui');
@@ -60,6 +65,7 @@ export class UiScene extends Phaser.Scene {
     this.chart = null;
     this.closeOptions = null;
     this.closeHelp = null;
+    this.pauseMenu = null;
     this.hud = new Hud(this, link.game, link.player, link.actions);
     this.minimap = new Minimap(this, link.game, link.player, link.minimap);
     this.tutorial = new Tutorial(this, link.game, link.player);
@@ -75,8 +81,13 @@ export class UiScene extends Phaser.Scene {
       const box = this.chatBox;
       new MiniButton(this, { x: TOP_BUTTONS_RIGHT - 2 * size - 3, y, size, touchPad: 2, text: 'C', onClick: () => box.toggle(), onHover: () => {} });
     }
+    // Solo games pause (P or Esc); online games have the chat button in that spot.
+    if (link.pause) {
+      const pause = link.pause;
+      new MiniButton(this, { x: TOP_BUTTONS_RIGHT - 2 * size - 3, y, size, touchPad: 2, text: 'P', onClick: () => pause(), onHover: () => {} });
+    }
     // Who you are and what to do; the tips start once it is closed.
-    this.intro = new IntroCard(this, link.game, link.player, () => this.openHelp());
+    this.intro = new IntroCard(this, link.game, link.player, () => this.openHelp(), link.notice);
   }
 
   override update(): void {
@@ -174,6 +185,37 @@ export class UiScene extends Phaser.Scene {
       return;
     }
     this.chart = typeChart(this, this.link.game, this.link.player, VIEW_W / 2, FIELD_TOP + FIELD_H / 2);
+  }
+
+  get pauseOpen(): boolean {
+    return this.pauseMenu !== null;
+  }
+
+  /** Pause window over the dimmed battlefield; it swallows clicks to the field and HUD below it. */
+  showPause(items: { label: string; action: () => void }[]): void {
+    this.hidePause();
+    const w = 168;
+    const h = 34 + items.length * 21;
+    const x = Math.round((VIEW_W - w) / 2);
+    const y = FIELD_TOP + Math.round((FIELD_H - h) / 2);
+    // Under the options (21000) and How to Play (21500) windows the menu opens.
+    const depth = 20500;
+    const blocker = this.add
+      .zone(0, 0, VIEW_W, VIEW_H)
+      .setOrigin(0, 0)
+      .setInteractive()
+      .setDepth(depth)
+      .on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => e.stopPropagation());
+    const dim = this.add.rectangle(0, FIELD_TOP, VIEW_W, FIELD_H, 0x000010, 0.45).setOrigin(0, 0).setDepth(depth);
+    const box = ff6Window(this, x, y, w, h).setDepth(depth);
+    const title = this.add.bitmapText(VIEW_W / 2, y + 9, FONT, 'PAUSED').setOrigin(0.5, 0).setTint(0xfff080).setDepth(depth);
+    const buttons = items.map((it, i) => new TextButton(this, x + 14, y + 25 + i * 21, w - 28, it.label, it.action, 18).setDepth(depth));
+    this.pauseMenu = [blocker, dim, box, title, ...buttons];
+  }
+
+  hidePause(): void {
+    this.pauseMenu?.forEach((p) => p.destroy());
+    this.pauseMenu = null;
   }
 
   get optionsOpen(): boolean {

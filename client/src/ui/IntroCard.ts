@@ -8,7 +8,6 @@ import { facesetKey } from './Hud.ts';
 import { ME_COLOR, TEAM_NAMES, teamColor } from './playerColors.ts';
 import { TextButton } from './TextButton.ts';
 
-const W = 288;
 const H = 68;
 
 /**
@@ -25,9 +24,13 @@ export class IntroCard {
     private readonly game: GameView,
     player: number,
     onHelp: () => void,
+    /** Two lines in place of the usual goal (campaign elites: what makes these waves special). */
+    notice?: [string, string],
   ) {
     const me = game.players[player]!;
     const builder = game.data.builders[me.builder];
+    // Wide enough for the notice's longer line.
+    const W = Math.max(288, 54 + Math.max(0, ...(notice ?? []).map((l) => l.length)) * 8 + 12);
     const x = Math.round((VIEW_W - W) / 2);
     const y = FIELD_TOP + Math.round((FIELD_H - H) / 2);
     const depth = 19800;
@@ -54,7 +57,7 @@ export class IntroCard {
     // Campaign nodes have no teams: hold the lane until the node's waves are cleared.
     if (!game.pve) text(54 + you.length * 8, 9, `TEAM ${TEAM_NAMES[me.team]}`, teamColor(me.team));
     const goal = game.pve ? 'HOLD YOUR LANE AND KEEP THE\nKING ALIVE THROUGH THE WAVES.' : 'BUILD FIGHTERS ON YOUR GRID,\nKILL THE FOE KING TO WIN.';
-    text(54, 21, goal, 0xe0e8ff).setLineSpacing(3);
+    text(54, 21, notice ? notice.join('\n') : goal, notice ? 0xff9090 : 0xe0e8ff).setLineSpacing(3);
     this.parts.push(
       new TextButton(scene, x + W - 196, y + H - 21, 104, 'HOW TO PLAY', () => {
         this.close();

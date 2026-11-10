@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DRAFT_SIZE, LEGION_DATA, MODES, MODE_IDS, PROPHET, ROOM_TITLE_CHARS, ROOM_TITLE_MAX, modeLocksBuilder, rollBuilders, rollableBuilders, roomTitle, type ModeId, type RoomListing } from '@legion/shared';
 import { builderPortrait, TITLE_PARADE, UNIT_SPRITES, spriteKey } from '../assets/manifest.ts';
 import { VIEW_H, VIEW_W, layoutCamera } from '../layout.ts';
+import { FEEDBACK_URL, LEGAL_URL, VERSION, openLink } from '../links.ts';
 import { DESKTOP, desktop } from '../desktop.ts';
 import { OFFICIAL_SERVER, fetchRooms, normalizeServer, serverUrl } from '../net/server.ts';
 import { settings, updateSettings } from '../settings.ts';
@@ -84,6 +85,7 @@ export class TitleScene extends Phaser.Scene {
     this.name = readName();
     this.drawBackground();
     this.drawLogo();
+    this.drawCorners();
     this.hand = this.add.image(0, 0, 'icon-hand').setOrigin(1, 0.5).setDepth(10);
     this.tweens.add({ targets: this.hand, x: '-=2', duration: 300, yoyo: true, repeat: -1 });
 
@@ -140,7 +142,7 @@ export class TitleScene extends Phaser.Scene {
     if (panel === 'main') {
       this.items = [
         { label: () => 'SOLO GAME', action: () => this.show('solo') },
-        { label: () => 'CAMPAIGN', action: () => this.scene.start('campaign') },
+        { label: () => 'CAMPAIGN  (PREVIEW)', action: () => this.scene.start('campaign') },
         { label: () => 'CREATE ONLINE GAME', action: () => this.show('create') },
         { label: () => 'JOIN ONLINE GAME', action: () => this.openList() },
         { label: () => 'HOW TO PLAY', action: () => this.openHelp() },
@@ -384,6 +386,22 @@ export class TitleScene extends Phaser.Scene {
       const s = this.add.sprite(-20 - i * 70, 252, `${spriteKey(spec)}-Walk`).setScale(2).play(`${spriteKey(spec)}-walk`).setDepth(2);
       this.tweens.add({ targets: s, x: VIEW_W + 520 - i * 70, duration: 26000, repeat: -1 });
     });
+  }
+
+  /** Build version (so feedback can name it) and the links out of the game, in the top corners. */
+  private drawCorners(): void {
+    this.add.bitmapText(4, 4, FONT, VERSION).setTint(0x7078b0);
+    let right = VIEW_W - 4;
+    for (const [label, url] of [['LEGAL', LEGAL_URL], ['FEEDBACK', FEEDBACK_URL]] as const) {
+      const t = this.add.bitmapText(right, 4, FONT, label).setOrigin(1, 0).setTint(0x9aa0d0);
+      const w = label.length * 8;
+      // Taller than the text, so it can be tapped.
+      const zone = this.add.zone(right - w - 4, 0, w + 8, 18).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+      zone.on('pointerover', () => t.setTint(0xffd060));
+      zone.on('pointerout', () => t.setTint(0x9aa0d0));
+      zone.on('pointerup', () => !this.closeHelp && openLink(url));
+      right -= w + 12;
+    }
   }
 
   private drawLogo(): void {

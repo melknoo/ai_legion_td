@@ -77,6 +77,8 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Solo games keep running behind other windows; the game has its own pause menu.
+      backgroundThrottling: false,
       additionalArguments: [`--legion-server=${serverArg() ?? ''}`, `--legion-version=${app.getVersion()}`],
     },
   });

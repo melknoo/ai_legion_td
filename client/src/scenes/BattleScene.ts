@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  AFFIXES,
   CELL,
   LANE,
   LEGION_DATA,
@@ -29,7 +30,7 @@ import { saveRun } from '../campaign/save.ts';
 import { attackStyle } from '../render/attackStyle.ts';
 import { settings } from '../settings.ts';
 import { SwingTrails, bodyMotion, projectile, weaponFor, weaponSwing, type Recoil } from '../render/combat.ts';
-import { LocalSession, type SoloConfig } from '../session/LocalSession.ts';
+import { LocalSession, MAX_CATCHUP_MS, type SoloConfig } from '../session/LocalSession.ts';
 import type { NetSession } from '../session/NetSession.ts';
 import type { Session } from '../session/Session.ts';
 import { SoloReport } from '../soloReport.ts';
@@ -113,6 +114,12 @@ export class BattleScene extends Phaser.Scene {
   private solo: SoloConfig | null = null;
   /** Campaign run whose node this game is (null outside the campaign). */
   private campaign: RunState | null = null;
+  /** Solo games: the pause menu is open and the sim stands still. */
+  private paused = false;
+  /** Real time the local sim was last advanced to (it follows the clock, not Phaser's smoothed frame delta). */
+  private lastRealMs = 0;
+  /** While the tab is hidden the browser stops drawing frames: this timer keeps a local game running. */
+  private hiddenTimer: number | null = null;
   /** Tells the server's stats page about this solo game; null online. */
   private soloReport: SoloReport | null = null;
   /** Index of the local player in the game. */
@@ -179,6 +186,9 @@ export class BattleScene extends Phaser.Scene {
     this.views.clear();
     this.selectedBuild = null;
     this.selectedUnit = null;
+    this.paused = false;
+    this.lastRealMs = performance.now();
+    this.hiddenTimer = null;
   }
 
   private localSession(config: SoloConfig): Session {
@@ -198,6 +208,14 @@ export class BattleScene extends Phaser.Scene {
     if (!battle) throw new Error('campaign run is not in a battle');
     const autopilot = new URLSearchParams(location.search).has('auto');
     return new LocalSession(devData(battle.data), { builder: run.builder, teamSize: 1, mode: 'ap' }, { seed: battle.seed, campaign: battle.campaign, autopilot });
+  }
+
+  /** Campaign elite: its affix, for the intro card (the map shows it only before the fight). */
+  private eliteNotice(): [string, string] | undefined {
+    const id = this.campaign && nodeBattle(this.campaign, LEGION_DATA)?.node.affix;
+    if (!id || !Object.hasOwn(AFFIXES, id)) return undefined;
+    const affix = AFFIXES[id]!;
+    return [`ELITE WAVES: ${affix.name.toUpperCase()}`, affix.text];
   }
 
   /** Campaign node over: the run moves on (saved at once, so a reload can't replay the node), then the banner. */
@@ -267,6 +285,8 @@ export class BattleScene extends Phaser.Scene {
         sell: () => this.sellSelected(),
       },
       chat: this.session.chat,
+      pause: this.canPause ? () => this.togglePause() : undefined,
+      notice: this.eliteNotice(),
       state: () => ({
         selectedBuild: this.selectedBuild,
         selectedUnit: this.selectedUnit,
@@ -289,6 +309,69 @@ export class BattleScene extends Phaser.Scene {
     this.soloReport = this.solo && !SHOWCASE ? new SoloReport(this.session.game, this.solo) : null;
     // Menu or play again before the end: the game was left.
     this.events.once('shutdown', () => this.soloReport?.end(null, true));
+    // Local games keep running while the window is in the background (online games run on the server).
+    if (!this.session.online && !SHOWCASE) {
+      document.addEventListener('visibilitychange', this.onVisibility);
+      this.events.once('shutdown', () => {
+        document.removeEventListener('visibilitychange', this.onVisibility);
+        this.stopHiddenTimer();
+      });
+    }
+  }
+
+  // ---- pause and background ---------------------------------------------------
+
+  /** Solo and campaign games can pause; online games and showcase clips can't. */
+  private get canPause(): boolean {
+    return !this.session.online && !SHOWCASE;
+  }
+
+  private togglePause(): void {
+    if (!this.canPause || (!this.paused && this.session.game.phase === 'over')) return;
+    sfx(this, 'click');
+    if (this.paused) return this.resume();
+    this.paused = true;
+    this.selectedBuild = null;
+    const leave = this.campaign ? { label: 'BACK TO MAP', action: () => this.toMenu() } : { label: 'QUIT TO MENU', action: () => this.toMenu() };
+    this.ui.showPause([
+      { label: 'RESUME', action: () => this.togglePause() },
+      { label: 'OPTIONS', action: () => this.ui.toggleOptions() },
+      { label: 'HOW TO PLAY', action: () => this.ui.openHelp() },
+      leave,
+    ]);
+  }
+
+  private resume(): void {
+    this.paused = false;
+    this.lastRealMs = performance.now();
+    this.ui.hidePause();
+  }
+
+  /** Real milliseconds since the sim was last advanced (0 while paused). */
+  private realElapsed(): number {
+    const now = performance.now();
+    const elapsed = Math.min(now - this.lastRealMs, MAX_CATCHUP_MS);
+    this.lastRealMs = now;
+    return this.paused ? 0 : Math.max(0, elapsed);
+  }
+
+  private readonly onVisibility = (): void => {
+    if (!document.hidden) return this.stopHiddenTimer();
+    // Hidden tabs get at most one timer call per second (far fewer after a while): each call catches up.
+    this.hiddenTimer ??= window.setInterval(() => this.tickHidden(), 1000);
+  };
+
+  private stopHiddenTimer(): void {
+    if (this.hiddenTimer !== null) window.clearInterval(this.hiddenTimer);
+    this.hiddenTimer = null;
+  }
+
+  /** Background step: only phase changes and the game end matter, nobody sees hits and effects. */
+  private tickHidden(): void {
+    if (this.session.game.phase === 'over') return;
+    for (const ev of this.session.update(this.realElapsed())) {
+      if (ev.type === 'phase' || ev.type === 'gameOver' || ev.type === 'arenaEnd') this.handleEvent(ev);
+    }
   }
 
   override update(_time: number, delta: number): void {
@@ -297,7 +380,10 @@ export class BattleScene extends Phaser.Scene {
     const holdClip = () => SHOWCASE && this.session.game.phase !== 'fight' && (this.scene.get('showcase') as ShowcaseScene).recording;
     // Showcase clips hurry through the build phases, which make dull footage.
     const speed = SHOWCASE && this.session.game.phase === 'build' ? SHOWCASE_FIELD.buildSpeed : 1;
-    const events = holdClip() ? [] : this.session.update(delta * speed);
+    // Local games follow real time, so throttled frames (window in the background) don't slow the sim;
+    // showcase clips step by frame delta, online games play back the server's state.
+    const step = SHOWCASE || this.session.online ? delta * speed : this.realElapsed();
+    const events = holdClip() || this.paused ? [] : this.session.update(step);
     for (const ev of events) this.handleEvent(ev);
     if (!holdClip()) this.updateCamera(delta / 1000);
     this.updateShown();
@@ -428,7 +514,9 @@ export class BattleScene extends Phaser.Scene {
   private setupInput(): void {
     const kb = this.input.keyboard!;
     // Hotkeys stay quiet while a chat line is typed.
-    const key = (event: string, fn: (e: KeyboardEvent) => void) => onKey(kb, event, (e) => !this.ui.keysCaptured && fn(e));
+    const key = (event: string, fn: (e: KeyboardEvent) => void) => onKey(kb, event, (e) => !this.ui.keysCaptured && !this.paused && fn(e));
+    // These also work in the pause menu.
+    const anyKey = (event: string, fn: (e: KeyboardEvent) => void) => onKey(kb, event, (e) => !this.ui.keysCaptured && fn(e));
     this.cursors = kb.createCursorKeys();
     // Command card: QWER / ASDF / YXCV as labelled on a German keyboard; Z also works for QWERTY.
     const slot = (i: number) => () => this.session.game.phase !== 'over' && this.slotKey(i);
@@ -439,7 +527,8 @@ export class BattleScene extends Phaser.Scene {
     key('keydown-TWO', () => this.pickMode('send'));
     key('keydown-THREE', () => this.pickMode('king'));
     key('keydown-T', () => this.ui.toggleTypeChart());
-    key('keydown-O', () => this.ui.toggleOptions());
+    anyKey('keydown-O', () => this.ui.toggleOptions());
+    anyKey('keydown-P', () => this.togglePause());
     key('keydown-I', () => this.ui.toggleWavePreview());
     key('keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
@@ -454,7 +543,15 @@ export class BattleScene extends Phaser.Scene {
       const game = this.session.game;
       this.setView(this.viewArea === this.me ? game.arenaOf(game.players[this.me]!.team) : this.me);
     });
-    key('keydown-ESC', () => !this.ui.introOpen && (this.ui.optionsOpen ? this.ui.toggleOptions() : this.session.game.phase === 'over' ? this.toMenu() : this.clearSelection()));
+    // Esc closes what is open (options, pause), then drops a selection, then pauses (solo).
+    anyKey('keydown-ESC', () => {
+      if (this.ui.introOpen) return;
+      if (this.ui.optionsOpen) return this.ui.toggleOptions();
+      if (this.session.game.phase === 'over') return this.toMenu();
+      if (this.paused) return this.togglePause();
+      if (this.selectedBuild !== null || this.selectedUnit !== null || !this.canPause) return this.clearSelection();
+      this.togglePause();
+    });
     key('keydown-R', () => this.session.game.phase === 'over' && this.playAgain());
     key('keydown-ENTER', () => this.campaign && this.session.game.phase === 'over' && this.toMenu());
     key('keydown-U', () => this.upgradeSelected());
@@ -471,6 +568,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('wheel', (p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => this.pointerWorld(p) && this.wheel(dy));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => p.wasTouch && this.touchDrag(p));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (this.paused) return;
       const w = this.pointerWorld(p);
       // Touch acts on release, so a swipe can pan the camera instead.
       if (p.wasTouch) return void (this.touchStart = w ? { x: p.x, y: p.y, panned: false } : null);
@@ -483,7 +581,7 @@ export class BattleScene extends Phaser.Scene {
       const start = this.touchStart;
       this.touchStart = null;
       const w = this.pointerWorld(p);
-      if (p.wasTouch && start && !start.panned && w) this.touchTap(w);
+      if (p.wasTouch && start && !start.panned && w && !this.paused) this.touchTap(w);
     });
   }
 
