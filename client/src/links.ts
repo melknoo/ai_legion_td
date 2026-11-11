@@ -1,8 +1,8 @@
 import { DESKTOP, desktop } from './desktop.ts';
 import { OFFICIAL_SERVER } from './net/server.ts';
 
-/** Where players report bugs and ideas. Swap in the Discord invite once there is one. */
-export const FEEDBACK_URL = 'https://github.com/melknoo/ai_legion_td/issues/new';
+/** Where players report bugs and ideas: the Legion Pixel Discord server (an invite that never expires). */
+export const FEEDBACK_URL = 'https://discord.gg/UXxjjqBTjC';
 
 /** Imprint and privacy notice: a static page next to the game (the desktop app opens the hosted one). */
 export const LEGAL_URL = DESKTOP ? `${OFFICIAL_SERVER}/legal.html` : '/legal.html';

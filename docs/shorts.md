@@ -116,6 +116,15 @@ Seit 04.11. privat (ersetzt durch den zweiten Vorrat, alter Look). In `schedule.
 | 10.11. | Will the boss get through? | primal s3 w10 | 1 LEAKED | [nrcwD5MZwJI](https://youtube.com/shorts/nrcwD5MZwJI) | Boss moments |
 | 11.11. | Will Abyss hold the boss? | abyss s4 w10 | HELD | [t3mN8KZTZPE](https://youtube.com/shorts/t3mN8KZTZPE) | Boss moments |
 
+**Dritter Vorrat (aufgenommen 10.11.2026, wartet auf Freigabe per Commit):** Reaktion auf die erste Auswertung. Jeder Clip beginnt mitten im Kampf (`from`/`len`, wie der Trailer, der am längsten gehalten hat), dauert 9–10 s und trägt eine Aussage statt einer Frage. Nach der Aufnahme mit `ffmpeg -t` gekürzt, damit keine Bauphase am Ende hängt; die MP4 liegen in `media/clips/v3/`.
+
+| Termin (17:30, GMT+1) | Titel | Clip | Säule |
+|---|---|---|---|
+| 12.11. | I built a tower defense for the browser | warclan s3 w10 | Devlog |
+| 13.11. | The whole wave melts in 10 seconds | abyss s4 w15 | Satisfying |
+| 14.11. | This is how you lose wave 9 | clockwork s2 w9 | Fails |
+| 15.11. | Three bosses. One lane. | canopy s4 w20 | Boss-Momente |
+
 Upload per Chrome: Das Upload-Werkzeug der Erweiterung nimmt nur Dateien bis 10 MB. Darum wandelt `sh tools/shorts/to-mp4.sh media/clips/<clip>.webm` jeden Clip in ein H.264-MP4 unter 10 MB (≤ 2,6 Mbit/s, sieht bei Pixel-Art aus wie das WebM; Ton per `loudnorm` lauter; ffmpeg per winget `Gyan.FFmpeg`, Pfad über `FFMPEG_DIR`). Das lädt Claude selbst hoch und füllt die Entwürfe aus (Titel, Text, Tags, Playlist, „nicht für Kinder“, Termin).
 
 Stumm aufnehmen: Im Tab vor dem Klick `__phaser.sound.masterVolumeNode.disconnect(__phaser.sound.context.destination)` ausführen (Dev-Build) – die Lautsprecher sind dann still, der Abgriff des Recorders bekommt den Ton weiter.
@@ -154,7 +163,9 @@ Stumm aufnehmen: Im Tab vor dem Klick `__phaser.sound.masterVolumeNode.disconnec
 
 | Woche | Shorts | Views | Weitergesehen | Abos | Besuche `?ref=yt` | Beste Säule |
 |---|---|---|---|---|---|---|
-| – | | | | | | |
+| 01.–09.11. (abgelesen 10.11.) | 6 öffentlich (zweiter Vorrat) + 3 aus dem ersten | 635 | 15 % bis zum Ende, 85 % weggewischt; 103 „Engaged Views“ | +2 | 2 | Boss-Momente (Canopy 3 Bosse 137, Warclan 118; Trailer 125) |
+
+Erste Auswertung (10.11.): 88 % der Views kommen aus dem Shorts-Feed, 6,9 % aus der Suche. Kein Short kam über ~140 Views, also zeigt YouTube sie nur der ersten Testgruppe; bei 85 % Wegwischen wird nicht weiter ausgespielt. Durchschnittlich angesehen: Trailer 69 %, Abyss-Welle 63 %, Chimera 58 %, Clockwork-Fail 57 %, Canopy 50 %, Warclan 45 %. Aus 635 Views wurden 2 Besuche auf der Seite. Folgerung: Der Einstieg (erste 1–2 s) hält nicht; nächste Runde mit anderem Format testen (Ergebnis zuerst zeigen, Stimme oder Musik, Devlog-/Nostalgie-Aufhänger) statt weiterer Bot-Clips gleicher Bauart.
 
 ## Reihenfolge
 
