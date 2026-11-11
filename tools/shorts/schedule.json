@@ -311,7 +311,8 @@
       "devlog",
       "indiedev"
     ],
-    "playlist": "Devlog"
+    "playlist": "Devlog",
+    "videoId": "6iE6OsVHEcw"
   },
   {
     "id": "v3-melt15-abyss-s4",
@@ -328,7 +329,8 @@
       "legion td",
       "satisfying"
     ],
-    "playlist": "Satisfying"
+    "playlist": "Satisfying",
+    "videoId": "hXhsrrUP15k"
   },
   {
     "id": "v3-fail9-clockwork-s2",
@@ -345,7 +347,8 @@
       "legion td",
       "fail"
     ],
-    "playlist": "Fails"
+    "playlist": "Fails",
+    "videoId": "NUO3YvoCrbY"
   },
   {
     "id": "v3-boss20-canopy-s4",
@@ -362,6 +365,7 @@
       "legion td",
       "boss fight"
     ],
-    "playlist": "Boss moments"
+    "playlist": "Boss moments",
+    "videoId": "baBkl-hbYt0"
   }
 ]
