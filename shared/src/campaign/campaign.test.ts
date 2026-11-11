@@ -138,6 +138,20 @@ describe('run', () => {
     expect(enterNode(run, D, 'nonsense')).toBe(run);
   });
 
+  it('lets the player start the wave early, in the campaign only', () => {
+    let run = started(5, 'grove');
+    run = enterNode(run, D, reachable(run)[0]!.id);
+    const b = nodeBattle(run, D)!;
+    const g = new Game({ seed: b.seed, data: b.data, players: [{ id: 'me', name: 'Me', team: 0, builder: run.builder }], campaign: b.campaign });
+    expect(g.phase).toBe('build');
+    expect(g.apply({ type: 'startWave', player: 0 })).toEqual({ ok: true });
+    g.tick();
+    expect(g.phase).toBe('fight');
+    expect(g.apply({ type: 'startWave', player: 0 }).ok).toBe(false);
+    const classic = new Game({ seed: 1, data: D, players: [{ id: 'a', name: 'A', team: 0, builder: 'grove' }, { id: 'b', name: 'B', team: 1, builder: 'grove' }] });
+    expect(classic.apply({ type: 'startWave', player: 0 })).toEqual({ ok: false, error: 'campaign only' });
+  });
+
   it('plays a battle node, keeps the army and offers a draft', () => {
     let run = started(5, 'grove');
     run = enterNode(run, D, reachable(run)[0]!.id);

@@ -118,7 +118,7 @@ export class Tutorial {
   private outline: Phaser.GameObjects.Container | null = null;
   private optOut = false;
 
-  /** The campaign has no sends and no other lanes; its command card has two tabs (KING is the second). */
+  /** The campaign has no sends and no other lanes. */
   private readonly tips: Tip[];
 
   constructor(
@@ -126,9 +126,7 @@ export class Tutorial {
     private readonly game: GameView,
     private readonly player: number,
   ) {
-    this.tips = game.pve
-      ? TIPS.filter((t) => t.id !== 'sends' && t.id !== 'map').map((t) => (t.id === 'wisps' || t.id === 'king' ? { ...t, spot: tab(1) } : t))
-      : TIPS;
+    this.tips = game.pve ? TIPS.filter((t) => t.id !== 'sends' && t.id !== 'map') : TIPS;
   }
 
   update(): void {

@@ -6,6 +6,7 @@ import {
   LEGION_DATA,
   MELEE_RANGE,
   MODE_IDS,
+  RELICS,
   STATUS,
   finishBattle,
   nodeBattle,
@@ -280,6 +281,7 @@ export class BattleScene extends Phaser.Scene {
       actions: {
         pickSlot: (i) => this.slotKey(i),
         pickMode: (mode) => this.pickMode(mode),
+        startWave: () => this.startWave(),
         toggleTypeChart: () => this.ui.toggleTypeChart(),
         upgrade: (to) => this.upgradeSelected(to),
         sell: () => this.sellSelected(),
@@ -333,12 +335,17 @@ export class BattleScene extends Phaser.Scene {
     this.paused = true;
     this.selectedBuild = null;
     const leave = this.campaign ? { label: 'BACK TO MAP', action: () => this.toMenu() } : { label: 'QUIT TO MENU', action: () => this.toMenu() };
-    this.ui.showPause([
-      { label: 'RESUME', action: () => this.togglePause() },
-      { label: 'OPTIONS', action: () => this.ui.toggleOptions() },
-      { label: 'HOW TO PLAY', action: () => this.ui.openHelp() },
-      leave,
-    ]);
+    // Campaign: what the run's relics do, next to the menu.
+    const relics = (this.campaign?.relics ?? []).flatMap((id) => (Object.hasOwn(RELICS, id) ? [RELICS[id]!.text] : []));
+    this.ui.showPause(
+      [
+        { label: 'RESUME', action: () => this.togglePause() },
+        { label: 'OPTIONS', action: () => this.ui.toggleOptions() },
+        { label: 'HOW TO PLAY', action: () => this.ui.openHelp() },
+        leave,
+      ],
+      relics.length ? { title: 'YOUR RELICS', lines: relics } : undefined,
+    );
   }
 
   private resume(): void {
@@ -524,7 +531,7 @@ export class BattleScene extends Phaser.Scene {
     key('keydown-Z', slot(SLOT_KEYS.indexOf('Y')));
     key('keydown-N', () => this.nextSendPage());
     key('keydown-ONE', () => this.pickMode('build'));
-    key('keydown-TWO', () => this.pickMode('send'));
+    key('keydown-TWO', () => (this.session.game.pve ? this.startWave() : this.pickMode('send')));
     key('keydown-THREE', () => this.pickMode('king'));
     key('keydown-T', () => this.ui.toggleTypeChart());
     anyKey('keydown-O', () => this.ui.toggleOptions());
@@ -661,6 +668,12 @@ export class BattleScene extends Phaser.Scene {
     if (mode === 'send' && this.session.game.pve) return;
     if (mode === 'send' && this.mode === 'send') this.nextSendPage();
     else this.setSlotMode(mode);
+  }
+
+  /** Campaign: done building, the wave comes now. */
+  private startWave(): void {
+    this.selectedBuild = null;
+    this.feedback(this.session.send({ type: 'startWave' }), 'WAVE STARTS!', 'click');
   }
 
   /** A command card slot arms a fighter for placement, sends a merc or buys an upgrade, depending on the slot mode. */

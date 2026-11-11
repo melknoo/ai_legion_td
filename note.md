@@ -12,3 +12,4 @@
 -wie lange haben fähigkeiten wie nova cd? eventuell mana einführen?
 -die bögen sind noch zur falschen seite
 -gegner brauchen nach dem leak noch länger bis sie beim könig ankommen, sonst ist der leak schon am kämpfen gegen den könig während andere noch ihre wave bekämpfen
+-im kampagnen mode, go button wenn man ready ist bevor die zeit abläuft.

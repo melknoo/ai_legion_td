@@ -152,7 +152,9 @@ export type Command =
   | { type: 'buyWorker'; player: number }
   | { type: 'upgradeFarm'; player: number }
   | { type: 'upgradeKing'; player: number; stat: KingStat }
-  | { type: 'reroll'; player: number };
+  | { type: 'reroll'; player: number }
+  /** Campaign only: end the build phase now. */
+  | { type: 'startWave'; player: number };
 
 export type GameEvent =
   | { type: 'phase'; phase: Phase; wave: number; endsAtMs: number }
@@ -340,7 +342,17 @@ export class Game implements GameView {
         return this.upgradeKing(player, cmd.stat);
       case 'reroll':
         return this.reroll(player);
+      case 'startWave':
+        return this.startWave();
     }
+  }
+
+  /** Campaign: the lone player ends the build phase; the wave starts with the next tick. */
+  private startWave(): CommandResult {
+    if (!this.pve) return fail('campaign only');
+    if (this.phase !== 'build') return fail('wave is running');
+    this.phaseEndsAtMs = this.timeMs;
+    return { ok: true };
   }
 
   /** Advances the simulation by one fixed step and returns what happened. */

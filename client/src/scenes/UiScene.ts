@@ -191,12 +191,16 @@ export class UiScene extends Phaser.Scene {
     return this.pauseMenu !== null;
   }
 
-  /** Pause window over the dimmed battlefield; it swallows clicks to the field and HUD below it. */
-  showPause(items: { label: string; action: () => void }[]): void {
+  /**
+   * Pause window over the dimmed battlefield; it swallows clicks to the field and HUD below it.
+   * `side` adds a list next to it (the campaign's relics: a title, then one line each).
+   */
+  showPause(items: { label: string; action: () => void }[], side?: { title: string; lines: string[] }): void {
     this.hidePause();
     const w = 168;
     const h = 34 + items.length * 21;
-    const x = Math.round((VIEW_W - w) / 2);
+    const sideW = side ? Math.max(side.title.length, ...side.lines.map((l) => l.length)) * 8 + 16 : 0;
+    const x = Math.round((VIEW_W - w - (side ? sideW + 4 : 0)) / 2);
     const y = FIELD_TOP + Math.round((FIELD_H - h) / 2);
     // Under the options (21000) and How to Play (21500) windows the menu opens.
     const depth = 20500;
@@ -211,6 +215,14 @@ export class UiScene extends Phaser.Scene {
     const title = this.add.bitmapText(VIEW_W / 2, y + 9, FONT, 'PAUSED').setOrigin(0.5, 0).setTint(0xfff080).setDepth(depth);
     const buttons = items.map((it, i) => new TextButton(this, x + 14, y + 25 + i * 21, w - 28, it.label, it.action, 18).setDepth(depth));
     this.pauseMenu = [blocker, dim, box, title, ...buttons];
+    if (side) {
+      const sx = x + w + 4;
+      this.pauseMenu.push(
+        ff6Window(this, sx, y, sideW, 28 + side.lines.length * 12).setDepth(depth),
+        this.add.bitmapText(sx + 8, y + 9, FONT, side.title).setTint(0xffd060).setDepth(depth),
+        this.add.bitmapText(sx + 8, y + 22, FONT, side.lines.join('\n')).setLineSpacing(3).setDepth(depth),
+      );
+    }
   }
 
   hidePause(): void {

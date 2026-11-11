@@ -37,6 +37,8 @@ export interface HudActions {
   pickSlot(i: number): void;
   /** A tab of the command card; the open send tab turns its page. */
   pickMode(mode: SlotMode): void;
+  /** Campaign: end the build phase now. */
+  startWave(): void;
   toggleTypeChart(): void;
   upgrade(to: string): void;
   sell(): void;
@@ -58,6 +60,7 @@ type Hover =
   | { on: 'slot'; index: number }
   | { on: 'action'; index: number }
   | { on: 'mode'; mode: SlotMode }
+  | { on: 'go' }
   | { on: 'chart' }
   | { on: 'wave' };
 
@@ -198,24 +201,32 @@ export class Hud {
       food: scene.add.bitmapText(RES_X + 64, 14, FONT, ''),
     };
 
-    // Command card: three tabs (1 BUILD, 2 SEND, 3 KING; the campaign has no sends), then the 4x3 slots (QWER / ASDF / YXCV).
+    // Command card: three tabs (1 BUILD, 2 SEND, 3 KING), then the 4x3 slots (QWER / ASDF / YXCV).
+    // The campaign has no sends: its second tab starts the wave instead.
     ff6Window(scene, CARD.x, HUD_Y, CARD.w, HUD_H);
+    const tabBox = (i: number) => ({ x: TAB.x, y: HUD_Y + 3 + i * ROW, w: TAB.w, h: TAB.h });
     this.tabs = Object.fromEntries(
-      MODE_TABS.filter((t) => !(game.pve && t.mode === 'send')).map((t, i) => [
-        t.mode,
-        new ModeTab(scene, {
-          x: TAB.x,
-          y: HUD_Y + 3 + i * ROW,
-          w: TAB.w,
-          h: TAB.h,
-          key: TOUCH ? '' : t.key,
-          icon: t.icon,
-          label: t.label,
-          onClick: () => act.pickMode(t.mode),
-          onHover: hoverFn({ on: 'mode', mode: t.mode }),
-        }),
-      ]),
+      MODE_TABS.flatMap((t, i) =>
+        game.pve && t.mode === 'send'
+          ? []
+          : [
+              [
+                t.mode,
+                new ModeTab(scene, {
+                  ...tabBox(i),
+                  key: TOUCH ? '' : t.key,
+                  icon: t.icon,
+                  label: t.label,
+                  onClick: () => act.pickMode(t.mode),
+                  onHover: hoverFn({ on: 'mode', mode: t.mode }),
+                }),
+              ],
+            ],
+      ),
     ) as Partial<Record<SlotMode, ModeTab>>;
+    if (game.pve) {
+      new ModeTab(scene, { ...tabBox(1), key: TOUCH ? '' : '2', icon: 'icon-bow', label: 'GO', onClick: () => act.startWave(), onHover: hoverFn({ on: 'go' }) });
+    }
     this.slots = SLOT_KEYS.map((_, i) =>
       new SlotButton(scene, {
         x: SLOT.x + (i % 4) * (SLOT.w + 1),
@@ -484,6 +495,9 @@ export class Hud {
       const pages = Math.ceil(Object.keys(g.data.mercs).length / SEND_PAGE_SIZE);
       const page = s.slotMode === 'send' ? `\n${TOUCH ? 'TAP' : 'CLICK'} AGAIN: PAGE ${((s.sendPage + 1) % pages) + 1}` : '';
       return this.showText('icon-log', 'SEND', key(2), `HITS FOE, +INCOME${page}`);
+    }
+    if (h?.on === 'go') {
+      return this.showText('icon-bow', 'START WAVE', TOUCH ? '' : 'KEY 2', g.phase === 'build' ? 'DONE BUILDING?\nSKIP THE TIMER' : 'WAVE IS RUNNING');
     }
     if (h?.on === 'chart') {
       return this.showText(ARMOR_ICON, 'DAMAGE TYPES', TOUCH ? '' : 'T: OPEN CHART', 'ATTACK VS ARMOR');
