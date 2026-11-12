@@ -57,7 +57,8 @@ export const isFight = (n: MapNode) => n.kind === 'battle' || n.kind === 'elite'
 const MIXED_WEIGHTS: [NodeKind, number, number][] = [
   // kind, weight, first row it may appear in
   ['battle', 50, 2],
-  ['elite', 16, 3],
+  // Not before row 4: an elite as the third fight (waves 5-6) met rosters of three fighters.
+  ['elite', 16, 4],
   ['shop', 12, 2],
   ['rest', 10, 3],
   ['treasure', 10, 2],

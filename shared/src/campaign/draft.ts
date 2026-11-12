@@ -20,7 +20,7 @@ export function campaignBuilders(d: GameData): string[] {
     .map((b) => b.id);
 }
 
-/** A run starts with one fighter, picked from the builder's tier-1 and tier-2 fighters (some T1s are support units). */
+/** A run starts with the builder's tier-1 and tier-2 fighters (some T1s are support units, some T2s archers). */
 export function starterOptions(d: GameData, builder: string): string[] {
   const fighters = d.builders[builder]?.fighters ?? [];
   return fighters.filter((id) => fighterTier(d, id) <= 2).sort((a, b) => fighterTier(d, a) - fighterTier(d, b));

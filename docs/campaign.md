@@ -22,9 +22,14 @@ Entscheidungen beim Umsetzen (weichen teils von unten ab):
 - **König:** Wellen-Buffs und Grants sind aus, weil sich Wellennummern über Knoten wiederholen. Der König wächst nur über Upgrades und Relikte.
 - **Preise (Lumber):** Relikt 90, Heilung 50 (+25 %), Rekrut 60. Draft überspringen: +20. Rest: +30 % HP oder +1 Wisp.
 
-Headless-Sim (`npx tsx tools/campaign/sim.ts all 3`, Bot spielt): 20/57 Runs gewonnen (35 %; mit wellenabhängigen Zeilen waren es 28 %). Typische Bot-Niederlagen:
-- Wellen 5–6 (Gale Hawk), wenn der Bot bis dahin nur 1–2 Drafts hatte.
-- Boss: Drei Leaks der Warlord-Bosse töten den König.
+Headless-Sim (`npx tsx tools/campaign/sim.ts all 5`, Stand 12.11.2026): 42/95 Runs gewonnen (44 %). Die Sim spielt den Klassik-Bot, gibt Fernkämpfern aber nie mehr Gold als der Front; mit dem reinen Bot (`--bot`) baut sie nur nach Preis und Typ. `--trace` zeigt jeden Kampf (Wellen, Leaks, Armee, Gold).
+
+Befunde (11.11.2026, noch mit einem wählbaren Starter und Elites ab Zeile 3: 38/95):
+- **Starter-Falle:** Ein Fernkämpfer als einziger Starter (Grove, Order, Warclan: der teurere der beiden) leakte schon in Welle 1–2 rund 25 Creeps und starb in Welle 3–4. Deshalb startet ein Run jetzt mit beiden Startern (T1 + T2), ohne Auswahl.
+- **Wellen 5–6 (Gale Hawk):** Hier enden die meisten Runs, früher vor allem an einer Elite in Zeile 3 mit nur 3 Fightern im Roster. Elites kommen jetzt erst ab Zeile 4; die Wellen 5–6 bleiben auch als normaler Kampf die häufigste Todesstelle.
+- **Alles oder nichts:** Bricht die Linie, leaken 20+ Creeps und der König stirbt in derselben Welle. König-HP ×2 brachte nur +3 Siege, doppelter Königsschaden +10: Der König verliert nicht langsam HP, die Run-HP wirken kaum als Puffer.
+- **Boss:** Drei Leaks der Warlord-Bosse töten den König.
+- **Spreizung:** Wildfolk, Umbral, Abyss, Warclan, Clockwork 5/5; Feral, Order, Tidal, Grove, Spectral, Crypt, Tinker 0/5. Ein Teil davon ist der Bot (billige T1 in Masse, bis das Food voll ist), kein sicheres Balance-Signal.
 
 Für M4 mit Spielgefühl nachjustieren.
 
@@ -72,7 +77,7 @@ Regeln für den Generator:
 - Zeile 1 ist immer ein Battle.
 - Direkt vor dem Boss liegt immer ein Rest.
 - Es gibt mindestens einen Shop pro Akt.
-- Elites kommen frühestens in Zeile 3.
+- Elites kommen frühestens in Zeile 4.
 - Zwei Nicht-Kampf-Knoten folgen nie direkt aufeinander.
 
 **Elite-Affixe** sind Modifier auf den Creeps einer Welle. Technisch nutzen sie `UnitState.mods`/`granted`, die es schon gibt (heute nur für Könige):
@@ -101,7 +106,7 @@ Regeln für den Generator:
 
 ## 5. Draft und Roster
 
-- **Start:** Man wählt einen freigeschalteten Builder und beginnt mit **einem** Tier-1-Fighter aus dessen Pool.
+- **Start:** Man wählt einen freigeschalteten Builder und beginnt mit dessen Tier-1- und Tier-2-Fighter (ohne Auswahl: ein einzelner Fernkämpfer als Starter hielt die ersten Wellen nicht).
 - **Nach jedem Kampfknoten** wählt man 1 aus 3 Fightern. Alternativ überspringt man und bekommt dafür Lumber.
   - Herkunft: ~80 % aus dem eigenen Builder-Pool, ~20 % aus anderen *freigeschalteten* Buildern.
   - Tier-Gewichtung: Akt 1 = T1–2, Akt 2 = T2–4, Akt 3 = T4–6. Elites und Bosse liefern ein Tier höher.

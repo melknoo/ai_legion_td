@@ -25,7 +25,7 @@ import {
 
 const D = LEGION_DATA;
 /** New run with the starting pick made (the tier-2 fighter). */
-const started = (seed: number, builder: string) => chooseReward(newRun(D, seed, builder), D, 1);
+const started = (seed: number, builder: string) => newRun(D, seed, builder);
 /** Fights on every path from row 1 to the boss. */
 function pathFights(map: ActMap): number[] {
   const walk = (n: MapNode, fights: number): number[] =>
@@ -43,7 +43,7 @@ describe('act map', () => {
       expect(map.rows[MAP_ROWS - 2]!.every((n) => n.kind === 'rest')).toBe(true);
       expect(map.rows[MAP_ROWS - 1]!.map((n) => n.kind)).toEqual(['boss']);
       expect(map.rows.slice(2, 5).some((r) => r.some((n) => n.kind === 'shop'))).toBe(true);
-      expect(map.rows.slice(0, 2).some((r) => r.some((n) => n.kind === 'elite'))).toBe(false);
+      expect(map.rows.slice(0, 3).some((r) => r.some((n) => n.kind === 'elite'))).toBe(false);
       for (const row of map.rows.slice(1, -2)) for (const k of ['elite', 'shop', 'rest']) expect(row.filter((n) => n.kind === k).length).toBeLessThanOrEqual(1);
       for (const row of map.rows) {
         for (const n of row) {
@@ -84,7 +84,7 @@ describe('draft', () => {
     expect(full.some((id) => own.includes(id))).toBe(false);
   });
 
-  it('starts every builder (not the prophet) with a pick of its tier-1 and tier-2 fighter', () => {
+  it('starts every builder (not the prophet) with its tier-1 and tier-2 fighter', () => {
     const builders = campaignBuilders(D);
     expect(builders).not.toContain('prophet');
     expect(builders).toContain('chimera');
@@ -126,13 +126,10 @@ function playNode(run: RunState): RunState {
 }
 
 describe('run', () => {
-  it('starts with a pick of one fighter, then the map; the king at full HP', () => {
-    const start = newRun(D, 5, 'grove');
-    expect(start.status).toBe('reward');
-    expect(chooseReward(start, D, null)).toBe(start);
-    const run = chooseReward(start, D, 1);
+  it('starts on the map with both starter fighters; the king at full HP', () => {
+    const run = newRun(D, 5, 'grove');
     expect(run.status).toBe('map');
-    expect(run.army.players[0]!.fighters).toEqual([starterOptions(D, 'grove')[1]]);
+    expect(run.army.players[0]!.fighters).toEqual(starterOptions(D, 'grove'));
     expect(run.army.king.hp).toBe(kingMax(run, D));
     expect(reachable(run).map((n) => n.row)).toEqual([1, 1, 1]);
     expect(enterNode(run, D, 'nonsense')).toBe(run);

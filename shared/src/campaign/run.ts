@@ -85,17 +85,17 @@ export function newRun(d: GameData, seed: number, builder: string): RunState {
           workers: r.startWorkers,
           farmLevel: 0,
           foodCap: r.startFood,
-          fighters: [],
+          // Both starters: a front-line fighter and a second one, so no pick can leave the lane without a front.
+          fighters: starterOptions(d, builder),
         },
       ],
       units: [],
       king: { hp: d.units[r.king.unit]!.hp, levels: { hp: 0, attack: 0, regen: 0 } },
     },
-    // The run starts with one fighter: a pick from the builder's first two tiers.
-    rewards: [{ kind: 'draft', options: starterOptions(d, builder) }],
+    rewards: [],
     returnTo: 'map',
     shop: [],
-    status: 'reward',
+    status: 'map',
     stats: { waves: 0, nodes: 0, leaks: 0, elites: 0 },
   };
 }
